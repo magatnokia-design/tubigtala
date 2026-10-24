@@ -47,7 +47,7 @@ Both projects use the same Arduino installation:
 
 Dagitab's firmware requires **ArduinoJson 6.21.5**. The IDE will keep offering 7.x - **do not update it**, and do not install a library that pulls in ArduinoJson 7. If this project needs JSON, write it against 6.21.5 (`StaticJsonDocument`, `createNestedObject`). Do not upgrade, downgrade, or remove the ESP32 core or any library Dagitab uses (`ArduinoJson`, `PZEM004Tv30`) without asking. Adding new libraries (OneWire, DallasTemperature, etc.) is fine.
 
-If arduino-cli is used, give this project its own build directory (`C:\App\tubigtala\.arduino-build`) and pass the same path to `--build-path` (compile) and `--input-dir` (upload) - never Dagitab's `C:\App\WattWise\.arduino-build`.
+If arduino-cli is used, give this project its own build directory (`C:\App\TubigTala\.arduino-build`) and pass the same path to `--build-path` (compile) and `--input-dir` (upload) - never Dagitab's `C:\App\WattWise\.arduino-build`.
 
 ### Two ESP32s on one laptop
 
@@ -282,14 +282,14 @@ Write documentation so it works without help or memory of the conversation. Do n
 
 ## Current status
 
-Location: `C:\App\tubigtala` (started as `C:\WaterMonitoring`, then `C:\App\WaterMonitoring`; renamed to match the repo on 24 Oct 2026). The Firebase CLI's per-folder account pin is keyed by path and was left behind on the old path; this folder falls back to the global default, `magatnokia@gmail.com`, which is the intended account. Sibling of Dagitab's `C:\App\WattWise`, never inside it - the Firebase CLI and Claude Code both read config from parent folders.
+Location: `C:\App\TubigTala` (started as `C:\WaterMonitoring`, then `C:\App\WaterMonitoring`; renamed to match the repo on 24 Oct 2026). Checked after the rename: `firebase login:list` -> `magatnokia@gmail.com`, `firebase use` -> `tubigtala-64d9e`. The Firebase CLI's per-folder pins are keyed by path, so the old `C:\App\WaterMonitoring` entries were removed from `firebase-tools.json`; this folder has no pin and falls back to the global default, `magatnokia@gmail.com`, which is the intended account. If the folder is renamed again, re-run both checks and clear the old path's entries. Sibling of Dagitab's `C:\App\WattWise`, never inside it - the Firebase CLI and Claude Code both read config from parent folders.
 
 Setup checklist (update as items are done):
 
-- [x] Git repo, branch `main`, global identity `magatnokia-design`, remote `origin` -> `magatnokia-design/tubigtala` (switched from a separate `Noah-Magat` account on 24 Oct 2026; GitHub is shared with Dagitab, Firebase is not)
+- [x] Git repo, branch `main`, global identity `magatnokia-design`, remote `origin` -> `magatnokia-design/tubigtala` (switched from a separate `Noah-Magat` account on 24 Oct 2026; the GitHub and Firebase accounts are shared with Dagitab; the repo and Firebase project are not)
 - [x] `.gitignore`, `.claude/settings.json` guardrails, placeholder `firebase.json` (`{}` - keeps the Firebase folder pin local; `firebase init` may replace its contents, but never delete it)
 - [x] First commit made locally (24 Oct 2026)
-- [ ] **First push** - `git push -u origin main` (uses the existing `magatnokia-design` login; no new sign-in expected)
+- [x] **First push** - `main` is on GitHub and tracks `origin/main` (24 Oct 2026)
 - [x] **Firebase account** - `magatnokia@gmail.com`, shared with Dagitab (24 Oct 2026)
 - [x] **Firebase project** - `tubigtala-64d9e`, linked as `default` in `.firebaserc` (24 Oct 2026). Still on Spark.
 - [ ] **Blaze + budget alert** - only when Cloud Functions are needed. Blaze is per project, so Dagitab's plan does not cover this one. Choose a billing account when upgrading (reusing Dagitab's or creating a new one is the user's call), then set a budget alert scoped to `tubigtala-64d9e` under Google Cloud console > Billing > Budgets & alerts.
