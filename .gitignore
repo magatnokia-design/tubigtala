@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets - only .env.example is tracked
+.env
+.env.*
+!.env.example
+*service-account*.json
+*-firebase-adminsdk-*.json
+secrets.h
+*.pem
+*.p12
+*.p8
+*.key
+
+# Android/iOS signing
+*.jks
+*.keystore
+credentials.json
+
+# Expo / React Native generated
+.expo/
+android/
+ios/
+web-build/
+
+# Vite / web build output
+dist/
+*.local
+
+# Firebase
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.firebase/
+
+# Arduino build output (never share with Dagitab's)
+.arduino-build/
+
+# Logs and OS noise
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Claude Code per-user settings
+.claude/settings.local.json

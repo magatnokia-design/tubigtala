@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch)",
+      "Bash(git remote -v)",
+      "Bash(git config --local --get*)",
+      "Bash(firebase login:list*)",
+      "Bash(firebase use)",
+      "Bash(firebase projects:list*)",
+      "Bash(gh auth status*)",
+      "Bash(arduino-cli version*)",
+      "Bash(arduino-cli board list*)",
+      "Bash(arduino-cli lib list*)",
+      "Bash(arduino-cli core list*)",
+      "Bash(npm ls*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(npm audit fix --force*)",
+      "Bash(arduino-cli lib upgrade*)",
+      "Bash(arduino-cli core upgrade*)",
+      "Bash(arduino-cli core uninstall*)",
+      "Bash(arduino-cli lib uninstall*)",
+      "Bash(git config --global*)",
+      "Bash(firebase login)",
+      "Bash(firebase login --*)",
+      "Bash(firebase logout*)",
+      "Bash(firebase login:use magatnokia@gmail.com*)",
+      "Bash(gh auth switch*)",
+      "Bash(gh auth logout*)",
+      "Bash(eas login*)",
+      "Bash(eas logout*)",
+      "Bash(npx eas-cli login*)",
+      "Bash(npx eas-cli logout*)",
+      "Bash(*wattwise-fe394*)",
+      "Bash(*App/WattWise*)",
+      "Bash(*App\\WattWise*)",
+      "Edit(//c/App/WattWise/**)",
+      "Edit(//c/App/WattWise-Web/**)",
+      "Write(//c/App/WattWise/**)",
+      "Write(//c/App/WattWise-Web/**)"
+    ]
+  }
+}
