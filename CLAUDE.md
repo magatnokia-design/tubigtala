@@ -47,7 +47,7 @@ Both projects use the same Arduino installation:
 
 Dagitab's firmware requires **ArduinoJson 6.21.5**. The IDE will keep offering 7.x - **do not update it**, and do not install a library that pulls in ArduinoJson 7. If this project needs JSON, write it against 6.21.5 (`StaticJsonDocument`, `createNestedObject`). Do not upgrade, downgrade, or remove the ESP32 core or any library Dagitab uses (`ArduinoJson`, `PZEM004Tv30`) without asking. Adding new libraries (OneWire, DallasTemperature, etc.) is fine.
 
-If arduino-cli is used, give this project its own build directory (`C:\App\WaterMonitoring\.arduino-build`) and pass the same path to `--build-path` (compile) and `--input-dir` (upload) - never Dagitab's `C:\App\WattWise\.arduino-build`.
+If arduino-cli is used, give this project its own build directory (`C:\App\tubigtala\.arduino-build`) and pass the same path to `--build-path` (compile) and `--input-dir` (upload) - never Dagitab's `C:\App\WattWise\.arduino-build`.
 
 ### Two ESP32s on one laptop
 
@@ -282,7 +282,7 @@ Write documentation so it works without help or memory of the conversation. Do n
 
 ## Current status
 
-Location: `C:\App\WaterMonitoring` (moved from `C:\WaterMonitoring` on 24 Oct 2026). Sibling of Dagitab's `C:\App\WattWise`, never inside it - the Firebase CLI and Claude Code both read config from parent folders.
+Location: `C:\App\tubigtala` (started as `C:\WaterMonitoring`, then `C:\App\WaterMonitoring`; renamed to match the repo on 24 Oct 2026). The Firebase CLI's per-folder account pin is keyed by path and was left behind on the old path; this folder falls back to the global default, `magatnokia@gmail.com`, which is the intended account. Sibling of Dagitab's `C:\App\WattWise`, never inside it - the Firebase CLI and Claude Code both read config from parent folders.
 
 Setup checklist (update as items are done):
 
