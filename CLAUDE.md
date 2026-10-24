@@ -12,14 +12,19 @@ This is a prototype and must not be described as a certified drinking-water safe
 
 This laptop also hosts a separate, live project: **Dagitab** (smart energy monitor) at `C:\App\WattWise` and `C:\App\WattWise-Web`, Firebase project `wattwise-fe394`, GitHub account `magatnokia-design`. It has real users. **Nothing done in this project may change, deploy to, or log out of anything Dagitab uses.**
 
-This project uses its **own** Firebase (and later Expo) account, but **shares Dagitab's GitHub account** (`magatnokia-design`, separate repo). The danger is not the accounts themselves; it is that each CLI on this machine remembers a login globally, and they default to Dagitab's owner.
+This project **shares Dagitab's GitHub and Firebase accounts** (`magatnokia-design` / `magatnokia@gmail.com`) but has its own repo and its own Firebase project. Expo is not set up yet.
+
+**Because the Firebase account is shared, the CLI can see and deploy to Dagitab's `wattwise-fe394` from this folder.** The only thing choosing the project is `.firebaserc` here (`default` -> `tubigtala-64d9e`). There is no account boundary behind it. Treat every Firebase command accordingly:
+- `firebase use` must print `tubigtala-64d9e` before any deploy. If it prints anything else, stop.
+- Never pass `--project wattwise-fe394`, never `firebase use wattwise-fe394`, and never pick `wattwise-fe394` from an interactive project list (`firebase use --add`, `firebase init`). On 24 Oct 2026 a failed `projects:create` left `wattwise-fe394` as the only choice in that list.
+- A deploy that offers to **delete** functions this project never wrote is pointed at Dagitab. Answer No.
 
 ### Accounts: bind per folder, never swap globally
 
 | Tool | Dagitab (leave alone) | This project | How it is kept apart |
 |---|---|---|---|
-| Firebase CLI | `magatnokia@gmail.com` (global default; also pinned to `C:\App\WattWise`) | `noahmagat0715@gmail.com` (to be pinned to `C:\App\WaterMonitoring` - see Current status) | `firebase login:add`, then `firebase login:use <email>` **inside `C:\App\WaterMonitoring`**. Binds to this folder only **if `firebase.json` exists here** - otherwise it silently changes the global default (happened 23 Oct 2026). |
-| Firebase project | `wattwise-fe394` | `watermoni-cli` (display name "WaterMoni CLI") - planned, not yet created | `.firebaserc` in this folder must name it |
+| Firebase CLI | `magatnokia@gmail.com` | **same** account (pinned to this folder 24 Oct 2026; a separate `noahmagat0715` account was tried and logged out) | nothing to keep apart at the account level - see the warning above |
+| Firebase project | `wattwise-fe394` | `tubigtala-64d9e` (display name "tubigtala"), created in the console 24 Oct 2026, Spark plan | `.firebaserc` here; `firebase use` must print `tubigtala-64d9e`. `watermoni-cli` and `tubigtala` were taken by other users. |
 | git commits | `magatnokia-design` / `magatnokia@gmail.com` (global config) | **same** - global identity, no repo-local override | nothing to keep apart; never change the global config from here |
 | git push | `magatnokia-design` -> `WattWise` | `magatnokia-design` -> https://github.com/magatnokia-design/tubigtala (**public**) | same account, different repo - nothing to keep apart |
 | gh CLI | `magatnokia-design` | **same** account - `gh` works here as-is | never `gh auth switch` / `logout` - Dagitab's APK workflow runs through this login |
@@ -285,11 +290,12 @@ Setup checklist (update as items are done):
 - [x] `.gitignore`, `.claude/settings.json` guardrails, placeholder `firebase.json` (`{}` - keeps the Firebase folder pin local; `firebase init` may replace its contents, but never delete it)
 - [x] First commit made locally (24 Oct 2026)
 - [ ] **First push** - `git push -u origin main` (uses the existing `magatnokia-design` login; no new sign-in expected)
-- [ ] **Firebase account** - the user runs, inside this folder: `firebase login:add` (as `noahmagat0715@gmail.com`), then `firebase login:use noahmagat0715@gmail.com`. Verify with `firebase login:list` here (must be noahmagat0715) **and** in `C:\App\WattWise` (must still be magatnokia). The account was logged out on 24 Oct 2026, so this has to be redone.
-- [ ] **Firebase project** - only after the account check: `firebase projects:create watermoni-cli --display-name "WaterMoni CLI"` (pick a suffix if the ID is taken; the ID is permanent), `firebase use --add` (alias `default`), then confirm `.firebaserc`. Blaze plan + budget alert in the console before Cloud Functions.
+- [x] **Firebase account** - `magatnokia@gmail.com`, shared with Dagitab (24 Oct 2026)
+- [x] **Firebase project** - `tubigtala-64d9e`, linked as `default` in `.firebaserc` (24 Oct 2026). Still on Spark.
+- [ ] **Blaze + budget alert** - only when Cloud Functions are needed. Blaze is per project, so Dagitab's plan does not cover this one. Choose a billing account when upgrading (reusing Dagitab's or creating a new one is the user's call), then set a budget alert scoped to `tubigtala-64d9e` under Google Cloud console > Billing > Budgets & alerts.
 - [ ] `firebase init` - decide the folder layout first (suggested: `firmware/`, `mobile/`, `web/`, `functions/`)
 - [ ] Expo account + access token, Brevo, TextBee - when those features are reached
 
-No application code, Firebase project, or provider account exists yet.
+No application code or provider account (Expo, Brevo, TextBee) exists yet. The Firebase project exists but has no services enabled.
 
 Planned architecture: ESP32 sensors → Firebase → mobile app and web client, with backend-triggered TextBee SMS, Brevo email, and Expo push notifications. Verify actual repository progress and configured services before treating any of these integrations as implemented.
