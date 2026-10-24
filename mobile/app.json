@@ -21,7 +21,6 @@
       "package": "com.magat_nokia.tubigtala"
     },
     "web": {
-      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
