@@ -74,6 +74,13 @@ jobs:
           npx tsc --noEmit
           npm test
 
+      # Gitignored (public repo). app.config.js only enables native Google sign-in when this
+      # file exists, so a missing secret would silently ship an APK without it - fail instead.
+      - name: Restore google-services.json
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > google-services.json
+          grep -q '"project_id": "tubigtala-64d9e"' google-services.json || { echo "::error::GOOGLE_SERVICES_JSON_BASE64 missing or not for tubigtala-64d9e"; exit 1; }
+
       # android/ is generated (and gitignored), so it never exists on a fresh runner.
       - name: Generate the Android project
         run: npx expo prebuild --platform android --no-install

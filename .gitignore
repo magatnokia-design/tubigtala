@@ -48,3 +48,8 @@ Thumbs.db
 
 # Claude Code per-user settings
 .claude/settings.local.json
+
+# Firebase Android config: not secret, but kept out of this public repo to avoid
+# exposed-key alerts. CI restores it from the GOOGLE_SERVICES_JSON_BASE64 secret.
+google-services.json
+GoogleService-Info.plist
