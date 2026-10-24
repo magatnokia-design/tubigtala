@@ -4,7 +4,7 @@ Project rules for AI-assisted development. Read this before generating or editin
 
 ## What this project is
 
-An IoT-based water monitoring prototype using an ESP32 and sensors to collect pH, temperature, and ammonia-gas readings, with a mobile app and web client for viewing readings and history. The system can issue configurable alerts through SMS, email, and mobile push notifications.
+An IoT-based water monitoring prototype using an ESP32 and sensors to collect pH, temperature, and ammonia-gas readings, with an Android mobile app for viewing readings and history. There is no web client (dropped 24 Oct 2026 - see "Scope decisions"). The system can issue configurable alerts through SMS, email, and mobile push notifications.
 
 This is a prototype and must not be described as a certified drinking-water safety system. The MQ-137 measures ammonia gas in air; it does **not** directly measure dissolved ammonia concentration in water. Label that measurement accurately in the UI, data model, reports, and alerts.
 
@@ -63,7 +63,6 @@ Do not read-modify-write, delete, or run commands inside `C:\App\WattWise` or `C
 
 - **Hardware / firmware:** ESP32 DevKit; Arduino IDE / Arduino-compatible C++
 - **Mobile app:** React Native + Expo, targeting Android
-- **Web client:** React + Vite + TypeScript
 - **Backend / data:** Firebase Authentication, Cloud Firestore, and Cloud Functions where appropriate
 - **SMS:** TextBee Android SMS gateway, sending through the registered Android phone and SIM
 - **Email:** Brevo transactional email API
@@ -93,7 +92,7 @@ Do not introduce a different database, backend, state-management library, CSS fr
 - Show commands before running them when they modify configuration, cloud resources, hardware state, or deployment state.
 - Long-running commands should run in the background when practical; report how to inspect their output and how to tell when they finish.
 - Never claim a cloud console setting or local tool was checked unless it was actually checked.
-- Installed on this machine (checked 24 Oct 2026): Node 24.20.0, npm 11.19.0, git 2.55.0, Firebase CLI 15.28.2, gh 2.98.0, arduino-cli 1.5.1 (ESP32 core 3.3.11). EAS is **not** installed globally - use `npx eas-cli` (25.3.0). Firebase, git and gh logins are machine-wide and shared with Dagitab - see "Isolation from Dagitab".
+- Installed on this machine (checked 24 Oct 2026): Node 24.20.0, npm 11.19.0, git 2.55.0, Firebase CLI 15.28.2, gh 2.98.0, arduino-cli 1.5.1 (ESP32 core 3.3.11). EAS is **not** installed globally - use `npx eas-cli` (25.3.0). Firebase emulators use the project-local JDK 21 in `.tools/` (machine Java 17 is too old for them); no Android SDK/emulator is installed - test on a phone with Expo Go. Firebase, git and gh logins are machine-wide and shared with Dagitab - see "Isolation from Dagitab".
 
 ## Git and GitHub
 
@@ -129,20 +128,20 @@ Trace a reported behavior across its actual path. For example, for an automated 
 5. **Backend dispatch:** inspect the Cloud Function result and provider response.
 6. **Provider / gateway:** confirm TextBee accepted the request and the Android gateway is online.
 7. **Delivery:** confirm the recipient actually received the SMS. An accepted API request alone is not proof of delivery.
-8. **Other surfaces:** confirm the mobile app and web client display consistent readings and alert status.
+8. **Other surfaces:** confirm the mobile app and the alert messages show consistent readings and alert status.
 
 For every test, state which layer it clears and what remains unverified. Read logs before theorising. Do not keep proposing code changes when evidence points to wiring, power, sensor calibration, carrier restrictions, or a provider outage.
 
 Check the user's own project history and prior fixes when relevant. A previous occurrence may be more useful than a new theory.
 
-## Consistency across mobile, web, backend, and firmware
+## Consistency across mobile, backend, and firmware
 
 - **Two surfaces answering the same question differently is a bug.** Define the correct rule once and apply it everywhere. Each surface should make units, timestamps, stale/offline status, and alert state clear.
 - When fixing a shared behavior, search all clients, backend functions, firmware, and documentation for other copies or stored values that might disagree.
 - Define a single documented meaning and unit for each reading. Do not silently mix raw ADC values, calibrated values, and engineering units.
 - Preserve the distinction between `0`, `null`/missing, stale, invalid, and unavailable data. Do not coerce missing readings into zero.
 - Do not present simulated readings as real hardware measurements. Clearly label demo/mock data.
-- Make thresholds, alert wording, and cooldown behavior consistent between the mobile app, web client, and backend.
+- Make thresholds, alert wording, and cooldown behavior consistent between the mobile app and backend.
 - If files are intentionally copied between packages or repositories, list them and verify byte identity when required. Watch line endings to avoid noisy diffs.
 
 ## Sensor and hardware rules
@@ -167,7 +166,7 @@ Check the user's own project history and prior fixes when relevant. A previous o
 - Do not make Firestore broadly readable or writable to avoid an authorization error.
 - ESP32 credentials and device identity must be scoped and protected. Do not embed privileged Firebase credentials, service-account keys, or backend secrets in firmware or client bundles.
 - Put privileged operations, threshold enforcement, and third-party provider calls in trusted backend code when appropriate.
-- Use server-side secrets/configuration for Cloud Functions. Never expose TextBee or Brevo API keys through `VITE_` variables, mobile-app bundles, browser code, source control, screenshots, or logs.
+- Use server-side secrets/configuration for Cloud Functions. Never expose TextBee or Brevo API keys through `EXPO_PUBLIC_` variables, mobile-app bundles, firmware, source control, screenshots, or logs.
 - Validate and bound readings before storing or acting on them. Handle missing, stale, malformed, and implausible values explicitly.
 - Add timestamps and device identity to readings. Document whether timestamps originate from the device or server and how clock/network failures are handled.
 - Plan for offline devices, retries, duplicate uploads, and transient provider/database failures. Avoid duplicate alerts when a request is retried.
@@ -191,7 +190,7 @@ Inspect the actual repository before enforcing or adding folders. Adapt these pr
 - Keep UI components focused on presentation and user interaction.
 - Put database/provider access behind service modules; do not scatter direct Firestore or provider calls across screens.
 - Keep business rules, sensor interpretation, threshold evaluation, and notification dispatch testable and separate from UI code.
-- Share types and validation schemas where they can genuinely be shared across mobile, web, and backend packages. Avoid copying business logic in ways that can drift.
+- Share types and validation schemas where they can genuinely be shared across the mobile and backend packages. Avoid copying business logic in ways that can drift.
 - Use TypeScript strict mode where TypeScript is configured. Avoid `any` unless justified in a comment.
 - Handle loading, empty, offline, stale, permission-denied, and error states explicitly.
 - Do not add packages for functionality already supported by the existing stack without explaining the need and asking first.
@@ -213,7 +212,7 @@ Inspect the actual repository before enforcing or adding folders. Adapt these pr
 - Keep validation schemas near the forms that use them unless the existing architecture has a shared-schema convention.
 - Show field-level validation messages for multi-field forms.
 - Reuse established design tokens and components. Do not invent one-off colors, spacing, or typography when the project has a design system.
-- Keep the mobile app and web client consistent in naming, units, thresholds, timestamps, empty/error states, and alert history.
+- Keep the mobile app, alert messages, and backend consistent in naming, units, thresholds, timestamps, empty/error states, and alert history.
 
 ## Environment variables and secrets
 
@@ -226,7 +225,7 @@ Document the variables actually used by the project in `.env.example` and this f
 - `BREVO_API_KEY` (backend only)
 - Sender identity and notification settings required by the chosen provider
 
-Use `VITE_` only for values intentionally exposed to the browser; **never use it for TextBee, Brevo, service-account, or other privileged secrets**. Mobile public configuration is not a secure place for server credentials either.
+Use `EXPO_PUBLIC_` only for values intentionally bundled into the app; **never use it for TextBee, Brevo, service-account, or other privileged secrets**. Anything in the APK can be extracted, so mobile configuration is not a secure place for server credentials.
 
 Before the first commit, inspect `.gitignore` and confirm local environment files, credentials, service-account JSON, signing files, and build outputs are excluded. If a secret is accidentally committed, do not merely delete it in a later commit: tell me and advise rotating/revoking it.
 
@@ -292,10 +291,28 @@ Setup checklist (update as items are done):
 - [x] **First push** - `main` is on GitHub and tracks `origin/main` (24 Oct 2026)
 - [x] **Firebase account** - `magatnokia@gmail.com`, shared with Dagitab (24 Oct 2026)
 - [x] **Firebase project** - `tubigtala-64d9e`, linked as `default` in `.firebaserc` (24 Oct 2026). Still on Spark.
-- [ ] **Blaze + budget alert** - only when Cloud Functions are needed. Blaze is per project, so Dagitab's plan does not cover this one. Choose a billing account when upgrading (reusing Dagitab's or creating a new one is the user's call), then set a budget alert scoped to `tubigtala-64d9e` under Google Cloud console > Billing > Budgets & alerts.
-- [ ] `firebase init` - decide the folder layout first (suggested: `firmware/`, `mobile/`, `web/`, `functions/`)
-- [ ] Expo account + access token, Brevo, TextBee - when those features are reached
+- [ ] **Blaze + budget alert** - decided 24 Oct 2026: upgrade when alert work (Cloud Functions) starts, not before. Blaze is per project, so Dagitab's plan does not cover this one. Choose a billing account when upgrading (reusing Dagitab's or creating a new one is the user's call), then set a budget alert scoped to `tubigtala-64d9e` under Google Cloud console > Billing > Budgets & alerts.
+- [x] **Folder layout + Firebase config** (24 Oct 2026) - `firmware/`, `mobile/`, `devtools/`, `docs/`; `firebase.json` (Firestore rules/indexes + emulators), written by hand rather than `firebase init`. `functions/` comes with alerts.
+- [x] **Security Rules + tests** - `firestore.rules`, 26 tests in `devtools/rules.test.mjs`, all passing on the emulator (24 Oct 2026). **Not deployed.**
+- [ ] **Firestore database in the cloud** - location chosen: `asia-southeast1` (Standard edition, delete protection on). CLI creation failed because the Firestore API is not enabled; create it in Firebase console > Build > Firestore Database (production mode), then deploy rules only when asked.
+- [ ] **Firebase Authentication** (email/password) - console step, not done. The emulator does not need it.
+- [x] **Expo** - EAS project created in the dashboard, ID `24bdc038-1f37-457e-9671-f3e0daf17229`, recorded in `mobile/app.json` (24 Oct 2026). No `EXPO_TOKEN`/`owner` set up locally yet.
+- [ ] Brevo, TextBee - when alerts are reached
 
-No application code or provider account (Expo, Brevo, TextBee) exists yet. The Firebase project exists but has no services enabled.
+### What exists (24 Oct 2026)
 
-Planned architecture: ESP32 sensors → Firebase → mobile app and web client, with backend-triggered TextBee SMS, Brevo email, and Expo push notifications. Verify actual repository progress and configured services before treating any of these integrations as implemented.
+- **Firmware** (`firmware/tubigtala/`): sensor reading + validation, prints JSON to serial. Compiles (ESP32 core 3.3.11, ArduinoJson 6.21.5, OneWire 2.3.8, DallasTemperature 4.0.6). **Never flashed; no hardware yet.** Wi-Fi/upload is step 4.
+- **Docs**: `docs/data-model.md` (fields, units, status rule, access rules), `docs/wiring.md` (planned pins/dividers/calibration, all unverified), `docs/runbook.md` (local dev).
+- **devtools/**: seed + simulated device + rules tests, all against the emulator under project ID `demo-tubigtala` (cannot reach a real project). The simulated device writes through the real rules.
+- **Mobile** (`mobile/`): sign-in, device list, device dashboard (pH, water temperature, ammonia gas in air; live/stale/offline/no-data; 1/6/24 h trends; simulated and uncalibrated labels). Typecheck, lint and 8 domain tests pass; Android bundle exports. **Not yet opened on a phone.**
+- **Java for emulators**: firebase-tools 15 needs Java 21+, the machine Java is 17 (left alone). A portable Temurin 21 is in the ignored `.tools/` folder; `devtools/firebase.mjs` uses it. See `docs/runbook.md` to recreate it.
+- **UI**: light-only water-blue/white theme (`mobile/src/constants/theme.ts`), Material Symbols icons via `expo-symbols` (`mobile/src/components/icon.tsx`) - no emoji. "Continue with Google" works against the Auth emulator in Expo Go. Real Google uses `@react-native-google-signin/google-signin` (free "Original" API, chosen 24 Oct 2026), loaded only in an APK; `mobile/app.config.js` adds its plugin once `mobile/google-services.json` exists, and it also needs `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
+- **APK builds**: `.github/workflows/build-apk.yml`, manual, modelled on Dagitab's. Android package `com.magat_nokia.tubigtala` (pending confirmation - permanent once installed). Own keystore at `C:\App\tubigtala-keystore\debug.keystore` (see `docs/runbook.md`). The APK uses the real project, so it is useless until Firestore, Auth and the app registration exist.
+- No provider accounts (Brevo, TextBee) exist. The Firebase project has no services enabled yet.
+
+Planned architecture: ESP32 sensors → Firebase → Android mobile app, with backend-triggered TextBee SMS, Brevo email, and Expo push notifications. Verify actual repository progress and configured services before treating any of these integrations as implemented.
+
+### Scope decisions
+
+- **No web client (24 Oct 2026).** The mobile app covers readings, history, alerts, and settings; a second front end would double the consistency work for a prototype. If a browser view is needed later, prefer Expo's web output from the same `mobile/` codebase over a separate React + Vite app, so the two cannot drift - and ask before adding it.
+- **Blaze, deferred (24 Oct 2026).** SMS and email must be sent from trusted backend code (Cloud Functions), which Spark cannot deploy. Putting TextBee/Brevo keys in the app or firmware instead was rejected because they can be extracted. Steps before alerts (sensors, data model, Firestore, mobile app) stay on Spark.

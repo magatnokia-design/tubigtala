@@ -1,0 +1,123 @@
+name: Build APK
+
+# Manual only, like Dagitab's: a build produces something people install, so it runs
+# when a human asks for it. The repo is public, so standard runners cost nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, digits only (e.g. 0.1.0)'
+        required: true
+        type: string
+      publish_release:
+        description: 'Also publish a GitHub Release with the APK attached'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Only the optional release step needs write access.
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile
+
+    # The APK talks to the real Firebase project; the emulators live on the dev PC and are
+    # unreachable from an installed app. These are public web-config values (repo
+    # *variables*, not secrets) - Settings > Secrets and variables > Actions > Variables.
+    env:
+      EXPO_PUBLIC_USE_EMULATOR: 'false'
+      EXPO_PUBLIC_FIREBASE_API_KEY: ${{ vars.EXPO_PUBLIC_FIREBASE_API_KEY }}
+      EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
+      EXPO_PUBLIC_FIREBASE_APP_ID: ${{ vars.EXPO_PUBLIC_FIREBASE_APP_ID }}
+      # Optional: without it (or without mobile/google-services.json) the APK reports Google
+      # sign-in as unavailable and email sign-in still works.
+      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail in seconds, not after a 15-minute build that would crash on launch
+      # (mobile/src/services/firebase.ts throws when real config is missing).
+      - name: Check Firebase config variables
+        run: |
+          missing=0
+          for v in EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_APP_ID; do
+            if [ -z "${!v}" ]; then echo "::error::repo variable $v is not set"; missing=1; fi
+          done
+          if [ "$EXPO_PUBLIC_FIREBASE_PROJECT_ID" != "tubigtala-64d9e" ]; then
+            echo "::error::EXPO_PUBLIC_FIREBASE_PROJECT_ID must be tubigtala-64d9e (never Dagitab's project)"; missing=1
+          fi
+          exit $missing
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check types and tests
+        run: |
+          npx tsc --noEmit
+          npm test
+
+      # android/ is generated (and gitignored), so it never exists on a fresh runner.
+      - name: Generate the Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          CI: 'true'
+
+      # TubigTala's own keystore (not Dagitab's). Kept stable so new APKs install over old
+      # ones, and so its SHA-1 matches the one registered in Firebase for Google sign-in.
+      - name: Restore the signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}" | base64 -d > android/app/debug.keystore
+          test -s android/app/debug.keystore || { echo "::error::ANDROID_DEBUG_KEYSTORE_BASE64 secret missing or empty"; exit 1; }
+
+      # ARM only: x86 libraries only run on emulators and roughly double the APK size.
+      - name: Build release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a --no-daemon
+
+      - name: Check the APK
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          echo "ABIs present:"; unzip -l "$APK" | grep -oE 'lib/[a-z0-9_-]+/' | sort -u
+          if unzip -l "$APK" | grep -qE 'lib/(x86|x86_64)/'; then echo "::error::x86 libraries present"; exit 1; fi
+          SIZE=$(unzip -l "$APK" assets/index.android.bundle | awk 'NR==4{print $1}')
+          echo "index.android.bundle: $SIZE bytes"
+          test "${SIZE:-0}" -gt 1000000 || { echo "::error::JS bundle missing or too small"; exit 1; }
+          echo "APK size: $(( $(stat -c%s "$APK") / 1048576 )) MiB"
+
+      - name: Name the APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "../TubigTala-v${{ inputs.version }}.apk"
+          sha256sum "../TubigTala-v${{ inputs.version }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TubigTala-v${{ inputs.version }}
+          path: TubigTala-v${{ inputs.version }}.apk
+          retention-days: 30
+
+      - name: Publish release
+        if: ${{ inputs.publish_release }}
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ inputs.version }}" "TubigTala-v${{ inputs.version }}.apk" \
+            --title "TubigTala v${{ inputs.version }}" --generate-notes

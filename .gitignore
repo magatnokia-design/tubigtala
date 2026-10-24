@@ -37,6 +37,9 @@ ui-debug.log*
 # Arduino build output (never share with Dagitab's)
 .arduino-build/
 
+# Project-local tools (portable JDK 21 for the Firebase emulators)
+.tools/
+
 # Logs and OS noise
 *.log
 npm-debug.log*

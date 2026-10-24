@@ -1,0 +1,18 @@
+{
+  "name": "tubigtala-devtools",
+  "private": true,
+  "type": "module",
+  "description": "Local-only tools: Firestore rules tests, emulator seed data, and a simulated device. Everything here targets the emulator under the demo-tubigtala project ID and cannot reach a real Firebase project.",
+  "scripts": {
+    "emulators": "node firebase.mjs emulators:start --project demo-tubigtala",
+    "test:rules": "node firebase.mjs emulators:exec --only firestore --project demo-tubigtala \"node --test rules.test.mjs\"",
+    "seed": "node seed.mjs",
+    "simulate": "node simulate.mjs",
+    "assign": "node assign.mjs"
+  },
+  "dependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.1.0",
+    "firebase-admin": "^14.5.0"
+  }
+}

@@ -1,0 +1,64 @@
+rules_version = '2';
+
+// Access design: docs/data-model.md ("Access rules"). Tests: devtools/rules.test.mjs.
+// Anything not explicitly allowed is denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isNullOrNumberIn(v, lo, hi) {
+      return v == null || ((v is int || v is float) && v >= lo && v <= hi);
+    }
+
+    match /devices/{deviceId} {
+      allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      // Devices are provisioned with devtools (admin). The owner may only rename.
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && request.resource.data.name is string
+        && request.resource.data.name.trim().size() >= 1
+        && request.resource.data.name.size() <= 40;
+
+      match /readings/{readingId} {
+        function device() {
+          return get(/databases/$(database)/documents/devices/$(deviceId)).data;
+        }
+
+        function validReading(r) {
+          return r.keys().hasOnly(['bootId', 'seq', 'serverTime', 'deviceTime', 'ph',
+                                   'phCalibrated', 'phMv', 'temperatureC', 'nh3GasMv',
+                                   'simulated', 'firmware'])
+            && r.keys().hasAll(['bootId', 'seq', 'serverTime', 'deviceTime', 'ph',
+                                'phCalibrated', 'phMv', 'temperatureC', 'nh3GasMv',
+                                'simulated', 'firmware'])
+            && r.bootId is string && r.bootId.size() >= 4 && r.bootId.size() <= 32
+            && r.seq is int && r.seq >= 0
+            && readingId == r.bootId + '-' + string(r.seq)
+            && r.serverTime == request.time
+            && (r.deviceTime == null || r.deviceTime is timestamp)
+            && isNullOrNumberIn(r.ph, 0, 14)
+            && r.phCalibrated is bool
+            && isNullOrNumberIn(r.phMv, 0, 5500)
+            && isNullOrNumberIn(r.temperatureC, -10, 60)
+            && isNullOrNumberIn(r.nh3GasMv, 0, 5500)
+            && r.simulated is bool
+            && r.firmware is string && r.firmware.size() >= 1 && r.firmware.size() <= 32;
+        }
+
+        allow read: if signedIn() && device().ownerUid == request.auth.uid;
+
+        // Create only: re-sending the same reading hits the same ID and is rejected,
+        // which is the duplicate-upload guard. No updates or deletes from clients.
+        allow create: if signedIn()
+          && device().deviceUid == request.auth.uid
+          && validReading(request.resource.data)
+          && request.resource.data.simulated == device().simulated;
+      }
+    }
+  }
+}
