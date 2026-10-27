@@ -13,6 +13,44 @@ service cloud.firestore {
       return v == null || ((v is int || v is float) && v >= lo && v <= hi);
     }
 
+    // One profile per account: name, PH mobile number and alert preferences. Personal data,
+    // so only its owner can read or write it.
+    match /users/{uid} {
+      function isOwner() {
+        return signedIn() && request.auth.uid == uid;
+      }
+
+      function validProfile(p) {
+        return p.keys().hasOnly(['displayName', 'phoneE164', 'smsAlertsEnabled', 'pushEnabled',
+                                 'createdAt', 'updatedAt'])
+          && p.keys().hasAll(['displayName', 'phoneE164', 'smsAlertsEnabled', 'pushEnabled',
+                              'createdAt', 'updatedAt'])
+          && p.displayName is string
+          && p.displayName.trim().size() >= 1 && p.displayName.size() <= 60
+          && (p.phoneE164 == null || (p.phoneE164 is string && p.phoneE164.matches('^[+]639[0-9]{9}$')))
+          && p.smsAlertsEnabled is bool
+          && (!p.smsAlertsEnabled || p.phoneE164 != null)
+          && p.pushEnabled is bool
+          && p.updatedAt == request.time;
+      }
+
+      allow read: if isOwner();
+      allow create: if isOwner()
+        && validProfile(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner()
+        && validProfile(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      // Written by the alert backend (not built yet). The owner can only mark them read.
+      match /notifications/{notificationId} {
+        allow read: if isOwner();
+        allow update: if isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read is bool;
+      }
+    }
+
     match /devices/{deviceId} {
       allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
 

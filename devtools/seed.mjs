@@ -25,6 +25,17 @@ async function upsertUser({ email, password }) {
 const owner = await upsertUser(DEMO_OWNER);
 const device = await upsertUser(DEMO_DEVICE);
 
+// Profile for the demo owner (users/{uid}, docs/data-model.md). +639000000001 is a
+// placeholder in an unassigned prefix, not someone's real number.
+await db.doc(`users/${owner.uid}`).set({
+  displayName: 'Demo User',
+  phoneE164: '+639000000001',
+  smsAlertsEnabled: false,
+  pushEnabled: false,
+  createdAt: FieldValue.serverTimestamp(),
+  updatedAt: FieldValue.serverTimestamp(),
+});
+
 const deviceRef = db.doc(`devices/${DEMO_DEVICE.id}`);
 await deviceRef.set({
   name: 'Simulated tank',

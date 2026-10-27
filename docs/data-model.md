@@ -7,11 +7,32 @@ Status: **draft, 24 Oct 2026.** No real hardware has produced a reading yet; eve
 ## Collections
 
 ```
-devices/{deviceId}                      one monitoring unit (ESP32 + probes)
-devices/{deviceId}/readings/{readingId} one sample from that unit
+users/{uid}                                  one app account's profile and alert preferences
+users/{uid}/notifications/{notificationId}   alerts for that account (written by the backend)
+devices/{deviceId}                           one monitoring unit (ESP32 + probes)
+devices/{deviceId}/readings/{readingId}      one sample from that unit
 ```
 
 Planned, not built yet: `alertRules`, `alertEvents` (step 6, needs Cloud Functions / Blaze).
+
+### `users/{uid}`
+
+Created at sign-up (email) or on the "Complete your profile" screen (Google). The app treats an account as ready only when this document exists **and** `phoneE164` is set; until then it shows that screen.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `displayName` | string | 1–60 characters. |
+| `phoneE164` | string \| null | Philippine mobile number, `+639XXXXXXXXX` (pattern enforced by rules and `mobile/src/domain/phone.ts`). Personal data: never log it. |
+| `smsAlertsEnabled` | boolean | User wants SMS alerts. Cannot be `true` while `phoneE164` is `null`. **Nothing sends SMS yet** (needs Cloud Functions). |
+| `pushEnabled` | boolean | User allowed app notifications and Android granted the permission. Nothing sends push yet. |
+| `createdAt` | timestamp | Server time at creation, never changed. |
+| `updatedAt` | timestamp | Server time of the last write (rules require `== request.time`). |
+
+Only the owner can read or write it; it cannot be deleted from the app. Email lives in Firebase Auth, not here.
+
+### `users/{uid}/notifications/{notificationId}`
+
+Planned shape (the alert backend will write these; the app only reads them and flips `read`): `title` string, `body` string, `deviceId` string, `createdAt` timestamp, `read` boolean. Clients can never create or delete them.
 
 ### `devices/{deviceId}`
 
@@ -64,6 +85,7 @@ Implemented once in `mobile/src/domain/status.ts`. When Cloud Functions exist, m
 
 Enforced in `firestore.rules`, tested in `devtools/rules.test.mjs`.
 
+- A user can read and write only their own `users/{uid}` profile (valid fields only), read their own notifications, and change nothing on a notification except `read`.
 - A user can read a device, and its readings, only if they are its `ownerUid`.
 - Only the device's `deviceUid` can create readings, and only well-formed ones (types, ranges, `serverTime == request.time`, `simulated` matches the device).
 - Nobody can update or delete readings from a client.

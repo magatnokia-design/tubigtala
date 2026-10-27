@@ -11,6 +11,25 @@ export interface Device {
   phCalibrationStatus: PhCalibrationStatus;
 }
 
+/** users/{uid} (docs/data-model.md). */
+export interface Profile {
+  displayName: string;
+  /** +639XXXXXXXXX, or null until entered. */
+  phoneE164: string | null;
+  smsAlertsEnabled: boolean;
+  pushEnabled: boolean;
+}
+
+/** users/{uid}/notifications/{id}, written by the (future) alert backend. */
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  deviceId: string | null;
+  createdAtMs: number;
+  read: boolean;
+}
+
 export interface Reading {
   id: string;
   /** Server receive time (ms). The clock all status logic uses. */

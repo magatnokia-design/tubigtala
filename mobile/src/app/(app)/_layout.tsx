@@ -1,15 +1,11 @@
-import { Pressable } from 'react-native';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 
-import { Icon } from '@/components/icon';
 import { Colors } from '@/constants/theme';
-import { signOut } from '@/services/auth';
+import { SelectedDeviceProvider } from '@/hooks/use-selected-device';
 
 export default function AppLayout() {
   return (
-    <>
-      <StatusBar style="light" />
+    <SelectedDeviceProvider>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: Colors.light.tint },
@@ -18,19 +14,10 @@ export default function AppLayout() {
           headerShadowVisible: false,
           contentStyle: { backgroundColor: Colors.light.background },
         }}>
-        <Stack.Screen
-          name="index"
-          options={{
-            title: 'My devices',
-            headerRight: () => (
-              <Pressable onPress={() => signOut()} hitSlop={10} accessibilityLabel="Sign out">
-                <Icon name="logout" color="onTint" />
-              </Pressable>
-            ),
-          }}
-        />
-        <Stack.Screen name="device/[id]" options={{ title: 'Device' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+        <Stack.Screen name="edit-profile" options={{ title: 'Edit profile' }} />
       </Stack>
-    </>
+    </SelectedDeviceProvider>
   );
 }

@@ -13,8 +13,8 @@ const light = {
   backgroundElement: '#EEF7FD', // pale water, cards
   backgroundSelected: '#D7ECFA',
   textSecondary: '#4F6B85',
-  tint: '#0A84D0', // water blue: buttons, header, accents
-  tintDeep: '#055C99', // pressed / gradient end
+  tint: '#0079CE', // logo blue: buttons, header, accents
+  tintDeep: '#085698', // logo deep blue: pressed states, centre tab
   onTint: '#FFFFFF',
   border: '#CFE4F3',
   live: '#13865A',
@@ -25,6 +25,12 @@ const light = {
   onNotice: '#0B3D63',
   warning: '#FFF4DE',
   onWarning: '#6B4100',
+  // Gauge tracks on the Water tab (pH acidic / neutral / basic; temperature cool / warm)
+  scaleAcid: '#F5A35C',
+  scaleNeutral: '#3CC28A',
+  scaleBase: '#6A7FE0',
+  scaleCool: '#7CC3F0',
+  scaleWarm: '#F2A65A',
 } as const;
 
 export const Colors = { light, dark: light } as const;

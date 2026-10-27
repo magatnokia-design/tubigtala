@@ -49,6 +49,8 @@ cd mobile; npm start
 
 Scan the QR code with Expo Go. The app finds the emulators on the PC's IP automatically (from the Metro bundler address). Override with `EXPO_PUBLIC_EMULATOR_HOST` in `mobile\.env` if needed.
 
+**What the app shows, in order:** onboarding slides (first launch on that phone; replay from Settings > How to use TubigTala) -> sign in / create account -> "One more step" (any account without a PH mobile number, e.g. a new Google account) -> the three tabs: Analytics, Water (start tab), Settings. The seeded demo account already has a profile and number, so it goes straight to the tabs.
+
 **Google sign-in on the emulator:** "Continue with Google" signs in as a test account (`demo.google@tubigtala.test`) that the Auth emulator creates. It starts with no devices; give it the simulated device with `cd devtools; npm run assign -- demo.google@tubigtala.test` (and back with `demo@tubigtala.test`). Real Google accounts only work in an APK with a native Google sign-in library, which is not added yet.
 
 ## APK builds (GitHub Actions)

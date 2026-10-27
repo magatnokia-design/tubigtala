@@ -91,3 +91,50 @@ test('re-sending the same reading is rejected (dedupe)', async () => {
   await assertFails(setDoc(doc(db, path('abcd1234-0')), reading()));
 });
 test('readings cannot be deleted', () => assertFails(deleteDoc(doc(as('owner'), path('seed-0')))));
+
+// --- users/{uid} profiles ---
+function profile(overrides = {}) {
+  return {
+    displayName: 'Juan', phoneE164: '+639000000001', smsAlertsEnabled: false, pushEnabled: false,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...overrides,
+  };
+}
+const userPath = (uid) => `users/${uid}`;
+
+test('user can create own profile', () => assertSucceeds(setDoc(doc(as('juan'), userPath('juan')), profile())));
+test('user cannot create someone else\'s profile', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('maria')), profile())));
+test('signed-out cannot create a profile', () => assertFails(setDoc(doc(as(null), userPath('juan')), profile())));
+test('profile without phone is allowed (Google sign-up step)', () =>
+  assertSucceeds(setDoc(doc(as('juan'), userPath('juan')), profile({ phoneE164: null }))));
+for (const bad of ['09001234567', '+639001234', '+63900123456789', '+638171234567', '+1 900 123 4567']) {
+  test(`phone ${bad} is rejected`, () => assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ phoneE164: bad }))));
+}
+test('SMS alerts need a phone number', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ phoneE164: null, smsAlertsEnabled: true }))));
+test('blank name is rejected', () => assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ displayName: '  ' }))));
+test('extra profile field is rejected', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ isAdmin: true }))));
+test('client-chosen createdAt is rejected', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ createdAt: Timestamp.fromMillis(0) }))));
+
+test('owner can read and update own profile, others cannot read it', async () => {
+  await assertSucceeds(setDoc(doc(as('juan'), userPath('juan')), profile()));
+  await assertSucceeds(getDoc(doc(as('juan'), userPath('juan'))));
+  await assertFails(getDoc(doc(as('maria'), userPath('juan'))));
+  await assertSucceeds(updateDoc(doc(as('juan'), userPath('juan')), { smsAlertsEnabled: true, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(as('juan'), userPath('juan')), { createdAt: Timestamp.fromMillis(0), updatedAt: serverTimestamp() }));
+  await assertFails(deleteDoc(doc(as('juan'), userPath('juan'))));
+});
+
+// --- users/{uid}/notifications ---
+test('owner can read and mark own notifications read, nothing else', async () => {
+  await env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), 'users/juan/notifications/n1'), { title: 'pH high', body: 'x', read: false, createdAt: Timestamp.now() }));
+  await assertSucceeds(getDoc(doc(as('juan'), 'users/juan/notifications/n1')));
+  await assertFails(getDoc(doc(as('maria'), 'users/juan/notifications/n1')));
+  await assertSucceeds(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { read: true }));
+  await assertFails(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { title: 'edited' }));
+  await assertFails(setDoc(doc(as('juan'), 'users/juan/notifications/n2'), { title: 'fake', body: 'x', read: false }));
+  await assertFails(deleteDoc(doc(as('juan'), 'users/juan/notifications/n1')));
+});

@@ -58,19 +58,32 @@ export function subscribeLatestReading(
   return onSnapshot(q, (snap) => onData(snap.docs.length ? toReading(snap.docs[0]) : null), onError);
 }
 
-/** Readings since `sinceMs`, oldest first. */
+/**
+ * Cap on readings fetched per history query. Each document read counts against the Spark
+ * free tier (50k reads/day), and a week at one reading per minute is ~10k documents.
+ */
+export const HISTORY_LIMIT = 2000;
+
+/**
+ * Readings since `sinceMs`, oldest first. `truncated` is true when the cap was hit, i.e. the
+ * oldest part of the range is missing - the UI must say so rather than draw a shorter chart.
+ */
 export function subscribeReadingsSince(
-  deviceId: string, sinceMs: number, onData: (readings: Reading[]) => void, onError: (e: FirestoreError) => void,
+  deviceId: string, sinceMs: number,
+  onData: (result: { readings: Reading[]; truncated: boolean }) => void, onError: (e: FirestoreError) => void,
 ): Unsubscribe {
   const q = query(
     readingsOf(deviceId),
     where('serverTime', '>=', Timestamp.fromMillis(sinceMs)),
     orderBy('serverTime', 'desc'),
-    limit(1000),
+    limit(HISTORY_LIMIT),
   );
   return onSnapshot(
     q,
-    (snap) => onData(snap.docs.map(toReading).filter((r): r is Reading => r !== null).reverse()),
+    (snap) => onData({
+      readings: snap.docs.map(toReading).filter((r): r is Reading => r !== null).reverse(),
+      truncated: snap.size >= HISTORY_LIMIT,
+    }),
     onError,
   );
 }
