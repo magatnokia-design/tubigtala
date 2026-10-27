@@ -4,7 +4,6 @@ import { StyleSheet, View } from 'react-native';
 import { AuthScaffold } from '@/components/auth-scaffold';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
-import { Notice } from '@/components/notice';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -12,6 +11,7 @@ import { formatNationalInput, normalizePhMobile } from '@/domain/phone';
 import { nameError, phoneError } from '@/domain/validation';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfile } from '@/hooks/use-profile';
+import { useDialog } from '@/hooks/use-dialog';
 import { useForm } from '@/hooks/use-form';
 import { useTheme } from '@/hooks/use-theme';
 import { authErrorMessage, signOut } from '@/services/auth';
@@ -28,13 +28,12 @@ export default function CompleteProfileScreen() {
   const existing = profile.status === 'ready' ? profile.data : null;
 
   const form = useForm({ name: existing?.displayName || user?.displayName || '', phone: '' }, { name: nameError, phone: phoneError });
-  const [formError, setFormError] = useState<string | null>(null);
+  const dialog = useDialog();
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     const e164 = normalizePhMobile(form.values.phone);
     if (!form.validateAll() || !e164 || !user) return;
-    setFormError(null);
     setBusy(true);
     try {
       // Entering a number opts the user in to SMS alerts (switchable in Settings).
@@ -42,7 +41,7 @@ export default function CompleteProfileScreen() {
       else await createProfile(user.uid, form.values.name, e164);
       // The root layout opens the app once the saved profile arrives.
     } catch (e) {
-      setFormError(authErrorMessage(e));
+      await dialog.notify({ tone: 'danger', title: 'Could not save', message: authErrorMessage(e) });
       setBusy(false);
     }
   }
@@ -68,8 +67,6 @@ export default function CompleteProfileScreen() {
         keyboardType="phone-pad" autoComplete="tel" placeholder="9XX XXX XXXX" maxLength={12}
         returnKeyType="done" onSubmitEditing={submit} editable={!busy} autoFocus
       />
-
-      {formError && <Notice tone="warning">{formError}</Notice>}
 
       <Button label="Continue" icon="arrow_forward" onPress={submit} busy={busy} />
       <Button label="Use a different account" variant="text" onPress={() => signOut()} disabled={busy} />

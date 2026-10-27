@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { HEADER_CURVE, headerOnTop, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /** Water-blue header with rounded bottom corners, used by all three tabs. */
@@ -17,7 +17,7 @@ export function TabHeader({ eyebrow, title, right, children }: {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.header, { backgroundColor: theme.tint, paddingTop: insets.top + Spacing.three }]}>
+    <View style={[styles.header, headerOnTop, { backgroundColor: theme.tint, paddingTop: insets.top + Spacing.three }]}>
       <StatusBar style="light" />
       <View style={styles.row}>
         <View style={styles.titles}>
@@ -34,7 +34,7 @@ export function TabHeader({ eyebrow, title, right, children }: {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: Spacing.three,
-    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
+    borderBottomLeftRadius: HEADER_CURVE, borderBottomRightRadius: HEADER_CURVE,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   titles: { flex: 1 },

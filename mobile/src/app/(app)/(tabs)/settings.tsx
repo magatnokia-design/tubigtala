@@ -1,35 +1,31 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import type { AndroidSymbol } from 'expo-symbols';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 
+import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { Notice } from '@/components/notice';
 import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { HEADER_CURVE, Radius, Spacing } from '@/constants/theme';
 import { formatPhMobile } from '@/domain/phone';
 import { useAuth } from '@/hooks/use-auth';
+import { useDialog } from '@/hooks/use-dialog';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/services/auth';
-import { notificationPermissionGranted, requestNotificationPermission } from '@/services/notifications';
+import { notificationPermissionGranted, phoneNotificationsSupported, requestNotificationPermission } from '@/services/notifications';
 import { updateProfile } from '@/services/profile';
 
 type Pending = null | 'sms' | 'push';
-
-function confirmSignOut() {
-  Alert.alert('Sign out?', undefined, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Sign out', style: 'destructive', onPress: () => { signOut(); } },
-  ]);
-}
 
 export default function SettingsScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   const profile = useProfile();
+  const dialog = useDialog();
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<{ text: string; openSettings?: boolean } | null>(null);
   const [osPermission, setOsPermission] = useState<boolean | null>(null);
@@ -49,6 +45,10 @@ export default function SettingsScreen() {
   }
   const uid = user.uid;
 
+  async function confirmSignOut() {
+    if (await dialog.confirm({ title: 'Sign out?', confirmLabel: 'Sign out' })) signOut();
+  }
+
   async function toggleSms(on: boolean) {
     setError(null);
     setPending('sms');
@@ -67,6 +67,10 @@ export default function SettingsScreen() {
     try {
       if (on) {
         const result = await requestNotificationPermission();
+        if (result === 'unavailable') {
+          setError({ text: 'Phone notifications work in the installed app, not in Expo Go.' });
+          return;
+        }
         if (result !== 'granted') {
           setError(result === 'blocked'
             ? { text: 'Notifications are off in Android settings.', openSettings: true }
@@ -89,7 +93,7 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
       <TabHeader title="Settings" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <Section title="Account">
           <Pressable
             onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'name' } })}
@@ -100,12 +104,11 @@ export default function SettingsScreen() {
               <ThemedText style={[styles.avatarText, { color: theme.onTint }]}>{initials}</ThemedText>
             </View>
             <View style={styles.flex}>
-              <ThemedText type="smallBold" style={styles.name}>{p.displayName}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">{user.email ?? ''}</ThemedText>
+              <ThemedText type="smallBold" style={styles.name} numberOfLines={1}>{p.displayName}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="middle">{user.email ?? ''}</ThemedText>
             </View>
             <Icon name="chevron_right" color="textSecondary" />
           </Pressable>
-          <Row icon="logout" label="Sign out" onPress={confirmSignOut} />
         </Section>
 
         <Section title="SMS">
@@ -129,7 +132,7 @@ export default function SettingsScreen() {
           <Row
             icon="notifications_active"
             label="Allow notifications"
-            value={p.pushEnabled && osPermission === false ? 'Off in Android settings' : undefined}
+            value={!phoneNotificationsSupported ? 'Works in the installed app' : p.pushEnabled && osPermission === false ? 'Off in Android settings' : undefined}
             right={pending === 'push'
               ? <ActivityIndicator color={theme.tint} />
               : <Switch value={p.pushEnabled} onValueChange={togglePush} disabled={pending !== null} {...switchColors} />}
@@ -142,6 +145,8 @@ export default function SettingsScreen() {
             {error.openSettings && <Row icon="settings" label="Open Android settings" onPress={() => Linking.openSettings()} chevron />}
           </View>
         )}
+
+        <Button label="Sign out" icon="logout" variant="outline" onPress={confirmSignOut} style={styles.signOut} />
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
           {`Version ${Constants.expoConfig?.version ?? ''}`}
@@ -190,7 +195,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  content: { padding: Spacing.four, gap: Spacing.four, paddingBottom: Spacing.six },
+  scroll: { marginTop: -HEADER_CURVE },
+  content: { padding: Spacing.four, paddingTop: HEADER_CURVE + Spacing.three, gap: Spacing.four, paddingBottom: Spacing.six },
   section: { gap: Spacing.two },
   sectionTitle: { letterSpacing: 1, fontSize: 12 },
   sectionBody: { borderWidth: 1, borderRadius: Radius.card, overflow: 'hidden', paddingVertical: Spacing.one },
@@ -201,5 +207,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, minHeight: 56 },
   rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   error: { gap: Spacing.two },
+  signOut: { marginTop: Spacing.two },
   version: { textAlign: 'center' },
 });

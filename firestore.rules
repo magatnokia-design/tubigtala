@@ -42,12 +42,33 @@ service cloud.firestore {
         && validProfile(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt;
 
-      // Written by the alert backend (not built yet). The owner can only mark them read.
+      // Alerts. Until Cloud Functions exist the app raises them itself while open, so the owner
+      // may create one - only for their own device, in the fixed shape, unread, and with an ID
+      // derived from the reading so two phones open at once cannot create duplicates.
+      // The owner can mark them read and delete them.
       match /notifications/{notificationId} {
+        function validAlert(n) {
+          return n.keys().hasOnly(['title', 'body', 'deviceId', 'metric', 'value', 'level', 'readingId', 'createdAt', 'read'])
+            && n.keys().hasAll(['title', 'body', 'deviceId', 'metric', 'value', 'level', 'readingId', 'createdAt', 'read'])
+            && n.title is string && n.title.size() >= 1 && n.title.size() <= 80
+            && n.body is string && n.body.size() <= 200
+            && n.deviceId is string
+            && n.metric in ['ph', 'temperatureC', 'nh3GasMv']
+            && (n.value == null || n.value is int || n.value is float)
+            && n.level in ['warning', 'critical']
+            && n.readingId is string && n.readingId.size() >= 1 && n.readingId.size() <= 64
+            && notificationId == n.deviceId + '_' + n.metric + '_' + n.readingId
+            && n.createdAt == request.time
+            && n.read == false
+            && get(/databases/$(database)/documents/devices/$(n.deviceId)).data.ownerUid == uid;
+        }
+
         allow read: if isOwner();
+        allow create: if isOwner() && validAlert(request.resource.data);
         allow update: if isOwner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
           && request.resource.data.read is bool;
+        allow delete: if isOwner();
       }
     }
 

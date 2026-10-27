@@ -25,6 +25,14 @@ const light = {
   onNotice: '#0B3D63',
   warning: '#FFF4DE',
   onWarning: '#6B4100',
+  // Reading status (domain/thresholds.ts): text/border colour and soft background
+  levelNormal: '#13865A',
+  levelNormalBg: '#E7F6EE',
+  levelWarning: '#B26A00',
+  levelWarningBg: '#FFF4DE',
+  levelCritical: '#C9372C',
+  levelCriticalBg: '#FDECEA',
+  overlay: 'rgba(11,37,64,0.45)',
   // Gauge tracks on the Water tab (pH acidic / neutral / basic; temperature cool / warm)
   scaleAcid: '#F5A35C',
   scaleNeutral: '#3CC28A',
@@ -73,5 +81,13 @@ export const Spacing = {
 } as const;
 
 export const Radius = { small: 10, card: 18, pill: 999 } as const;
+
+/**
+ * Tab headers have rounded bottom corners. Scroll content starts this far *under* the header
+ * (which sits on top), so cards slide behind the curve instead of being cut off in a straight
+ * line below it.
+ */
+export const HEADER_CURVE = 24;
+export const headerOnTop = { zIndex: 2, elevation: 4 } as const;
 
 export const MaxContentWidth = 800;

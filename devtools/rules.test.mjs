@@ -128,13 +128,41 @@ test('owner can read and update own profile, others cannot read it', async () =>
 });
 
 // --- users/{uid}/notifications ---
-test('owner can read and mark own notifications read, nothing else', async () => {
+// 'owner' owns devices/dev-1 (see beforeEach); 'stranger' owns nothing.
+function alert(overrides = {}) {
+  return {
+    title: 'pH too basic', body: 'Tank: 9.4 (normal 6.5 – 8.5)', deviceId: DEVICE, metric: 'ph', value: 9.4,
+    level: 'critical', readingId: 'abcd1234-5', createdAt: serverTimestamp(), read: false, ...overrides,
+  };
+}
+const alertPath = (uid, a = alert()) => `users/${uid}/notifications/${a.deviceId}_${a.metric}_${a.readingId}`;
+
+test('owner can raise a valid alert for their own device', () =>
+  assertSucceeds(setDoc(doc(as('owner'), alertPath('owner')), alert())));
+test('the same alert cannot be raised twice (dedupe)', async () => {
+  await assertSucceeds(setDoc(doc(as('owner'), alertPath('owner')), alert()));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert()));
+});
+test('cannot raise an alert for someone else\'s device', () =>
+  assertFails(setDoc(doc(as('stranger'), alertPath('stranger')), alert())));
+test('cannot raise an alert in another user\'s inbox', () =>
+  assertFails(setDoc(doc(as('stranger'), alertPath('owner')), alert())));
+test('alert ID must match device, metric and reading', () =>
+  assertFails(setDoc(doc(as('owner'), `users/owner/notifications/${DEVICE}_ph_other`), alert())));
+test('alert must start unread with server time and a known level', async () => {
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ read: true })));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ createdAt: Timestamp.fromMillis(0) })));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ level: 'normal' })));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ extra: 1 })));
+});
+
+test('owner can read, mark read and delete own notifications; others cannot', async () => {
   await env.withSecurityRulesDisabled((ctx) =>
     setDoc(doc(ctx.firestore(), 'users/juan/notifications/n1'), { title: 'pH high', body: 'x', read: false, createdAt: Timestamp.now() }));
   await assertSucceeds(getDoc(doc(as('juan'), 'users/juan/notifications/n1')));
   await assertFails(getDoc(doc(as('maria'), 'users/juan/notifications/n1')));
   await assertSucceeds(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { read: true }));
   await assertFails(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { title: 'edited' }));
-  await assertFails(setDoc(doc(as('juan'), 'users/juan/notifications/n2'), { title: 'fake', body: 'x', read: false }));
-  await assertFails(deleteDoc(doc(as('juan'), 'users/juan/notifications/n1')));
+  await assertFails(deleteDoc(doc(as('maria'), 'users/juan/notifications/n1')));
+  await assertSucceeds(deleteDoc(doc(as('juan'), 'users/juan/notifications/n1')));
 });

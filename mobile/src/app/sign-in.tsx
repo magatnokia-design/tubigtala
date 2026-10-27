@@ -10,6 +10,7 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { emailError } from '@/domain/validation';
+import { useDialog } from '@/hooks/use-dialog';
 import { useForm } from '@/hooks/use-form';
 import { useTheme } from '@/hooks/use-theme';
 import { authErrorMessage, signIn, signInWithGoogle } from '@/services/auth';
@@ -27,16 +28,15 @@ export default function SignInScreen() {
     email: emailError,
     password: (v) => (v ? undefined : 'Enter your password.'),
   });
-  const [formError, setFormError] = useState<string | null>(null);
+  const dialog = useDialog();
   const [busy, setBusy] = useState<Busy>(null);
 
   async function run(kind: Exclude<Busy, null>, action: () => Promise<unknown>) {
-    setFormError(null);
     setBusy(kind);
     try {
       await action(); // the root layout moves on when auth state changes
     } catch (e) {
-      setFormError(authErrorMessage(e));
+      await dialog.notify({ tone: 'danger', title: 'Could not sign in', message: authErrorMessage(e) });
     } finally {
       setBusy(null);
     }
@@ -79,7 +79,6 @@ export default function SignInScreen() {
         editable={busy === null}
       />
 
-      {formError && <Notice tone="warning">{formError}</Notice>}
 
       <Button label="Sign in" onPress={submit} busy={busy === 'password'} disabled={busy !== null} />
 

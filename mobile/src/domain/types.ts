@@ -20,12 +20,15 @@ export interface Profile {
   pushEnabled: boolean;
 }
 
-/** users/{uid}/notifications/{id}, written by the (future) alert backend. */
+/** users/{uid}/notifications/{id}: alerts (raised by the app while open, later by the backend). */
 export interface AppNotification {
   id: string;
   title: string;
   body: string;
   deviceId: string | null;
+  metric: 'ph' | 'temperatureC' | 'nh3GasMv' | null;
+  value: number | null;
+  level: 'warning' | 'critical' | null;
   createdAtMs: number;
   read: boolean;
 }

@@ -5,7 +5,6 @@ import { router } from 'expo-router';
 import { AuthScaffold } from '@/components/auth-scaffold';
 import { Button } from '@/components/button';
 import { GoogleButton } from '@/components/google-button';
-import { Notice } from '@/components/notice';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -13,6 +12,7 @@ import { formatNationalInput, normalizePhMobile } from '@/domain/phone';
 import {
   confirmPasswordError, emailError, nameError, newPasswordError, PASSWORD_MIN, phoneError,
 } from '@/domain/validation';
+import { useDialog } from '@/hooks/use-dialog';
 import { useForm } from '@/hooks/use-form';
 import { useTheme } from '@/hooks/use-theme';
 import { authErrorMessage, signInWithGoogle, signUp } from '@/services/auth';
@@ -34,17 +34,23 @@ export default function SignUpScreen() {
     confirm: (v, all) => confirmPasswordError(all.password, v),
   });
   const { values, errors } = form;
-  const [formError, setFormError] = useState<string | null>(null);
+  const dialog = useDialog();
   const [busy, setBusy] = useState<Busy>(null);
 
 
   async function run(kind: Exclude<Busy, null>, action: () => Promise<unknown>) {
-    setFormError(null);
     setBusy(kind);
     try {
       await action();
     } catch (e) {
-      setFormError(authErrorMessage(e));
+      if (typeof e === 'object' && e && 'code' in e && e.code === 'auth/email-already-in-use') {
+        const goSignIn = await dialog.confirm({
+          tone: 'warning', title: 'Account already exists', message: 'This email already has an account.', confirmLabel: 'Sign in instead',
+        });
+        if (goSignIn) router.back();
+      } else {
+        await dialog.notify({ tone: 'danger', title: 'Could not create account', message: authErrorMessage(e) });
+      }
     } finally {
       setBusy(null);
     }
@@ -88,7 +94,6 @@ export default function SignUpScreen() {
         error={errors.confirm} autoComplete="new-password" returnKeyType="go" onSubmitEditing={submit} editable={editable}
       />
 
-      {formError && <Notice tone="warning">{formError}</Notice>}
 
       <Button label="Create account" onPress={submit} busy={busy === 'email'} disabled={!editable} />
 

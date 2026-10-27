@@ -1,7 +1,7 @@
 // Firestore access for devices and readings (docs/data-model.md). Converts documents to the
 // app types and keeps null sensor values as null.
 import {
-  collection, doc, limit, onSnapshot, orderBy, query, Timestamp, updateDoc, where,
+  collection, doc, getDocs, limit, onSnapshot, orderBy, query, Timestamp, updateDoc, where,
   type DocumentData, type FirestoreError, type QueryDocumentSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 
@@ -59,10 +59,10 @@ export function subscribeLatestReading(
 }
 
 /**
- * Cap on readings fetched per history query. Each document read counts against the Spark
- * free tier (50k reads/day), and a week at one reading per minute is ~10k documents.
+ * Cap on readings fetched per chart or export. Each document read counts against the Spark
+ * free tier (50k reads/day); a week (MAX_RANGE_DAYS) at one reading per minute is 10,080.
  */
-export const HISTORY_LIMIT = 2000;
+export const HISTORY_LIMIT = 10_080;
 
 /**
  * Readings since `sinceMs`, oldest first. `truncated` is true when the cap was hit, i.e. the
@@ -90,4 +90,30 @@ export function subscribeReadingsSince(
 
 export function renameDevice(deviceId: string, name: string): Promise<void> {
   return updateDoc(doc(db, 'devices', deviceId), { name: name.trim() });
+}
+
+const betweenQuery = (deviceId: string, startMs: number, endMs: number) => query(
+  readingsOf(deviceId),
+  where('serverTime', '>=', Timestamp.fromMillis(startMs)),
+  where('serverTime', '<=', Timestamp.fromMillis(endMs)),
+  orderBy('serverTime', 'desc'),
+  limit(HISTORY_LIMIT),
+);
+
+const toResult = (docs: QueryDocumentSnapshot<DocumentData>[]) => ({
+  readings: docs.map(toReading).filter((r): r is Reading => r !== null).reverse(),
+  truncated: docs.length >= HISTORY_LIMIT,
+});
+
+/** Live readings between two times (oldest first); updates as new readings arrive. */
+export function subscribeReadingsBetween(
+  deviceId: string, startMs: number, endMs: number,
+  onData: (result: { readings: Reading[]; truncated: boolean }) => void, onError: (e: FirestoreError) => void,
+): Unsubscribe {
+  return onSnapshot(betweenQuery(deviceId, startMs, endMs), (snap) => onData(toResult(snap.docs)), onError);
+}
+
+/** One-off fetch for exports. */
+export async function fetchReadingsBetween(deviceId: string, startMs: number, endMs: number) {
+  return toResult((await getDocs(betweenQuery(deviceId, startMs, endMs))).docs);
 }

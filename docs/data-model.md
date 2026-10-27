@@ -32,7 +32,13 @@ Only the owner can read or write it; it cannot be deleted from the app. Email li
 
 ### `users/{uid}/notifications/{notificationId}`
 
-Planned shape (the alert backend will write these; the app only reads them and flips `read`): `title` string, `body` string, `deviceId` string, `createdAt` timestamp, `read` boolean. Clients can never create or delete them.
+Alerts. Until Cloud Functions exist, the app raises them itself **while it is open** (`mobile/src/components/alert-watcher.tsx`): when a reading's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`), it creates one. Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
+
+The document ID is `{deviceId}_{metric}_{readingId}`, enforced by the rules, so two phones open at once cannot both raise the same alert. The owner may create alerts only for devices they own, mark them read, and delete them.
+
+### Alert ranges (placeholder)
+
+`mobile/src/domain/thresholds.ts` is the only definition: pH normal 6.5–8.5 (warning 6.0–9.0), temperature normal 20–32 °C (warning 15–35), ammonia normal up to 600 mV (warning up to 900). **Placeholders** until the water type is decided; ammonia ranges need the real sensor's baseline.
 
 ### `devices/{deviceId}`
 
@@ -85,7 +91,7 @@ Implemented once in `mobile/src/domain/status.ts`. When Cloud Functions exist, m
 
 Enforced in `firestore.rules`, tested in `devtools/rules.test.mjs`.
 
-- A user can read and write only their own `users/{uid}` profile (valid fields only), read their own notifications, and change nothing on a notification except `read`.
+- A user can read and write only their own `users/{uid}` profile (valid fields only); read, mark read and delete their own notifications; and create well-formed, de-duplicated alerts only for devices they own.
 - A user can read a device, and its readings, only if they are its `ownerUid`.
 - Only the device's `deviceUid` can create readings, and only well-formed ones (types, ranges, `serverTime == request.time`, `simulated` matches the device).
 - Nobody can update or delete readings from a client.

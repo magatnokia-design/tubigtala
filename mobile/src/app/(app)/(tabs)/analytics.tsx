@@ -1,129 +1,205 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import type { AndroidSymbol } from 'expo-symbols';
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CalendarModal } from '@/components/calendar';
 import { DeviceSwitcher } from '@/components/device-switcher';
 import { Icon } from '@/components/icon';
+import { LevelChip } from '@/components/level-chip';
 import { LineChart } from '@/components/line-chart';
 import { Notice } from '@/components/notice';
+import { OfflineBanner } from '@/components/offline-banner';
 import { StatusPill } from '@/components/status-pill';
-import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
-import { formatNumber } from '@/domain/format';
-import { stats, type Point } from '@/domain/readings';
+import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
+import { endOfDay, formatRange, startOfDay, type DayRange } from '@/domain/dates';
+import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
+import { insight, insightSentence } from '@/domain/insights';
+import { classify, METRIC_INFO, RANGES, type Metric } from '@/domain/thresholds';
 import type { Reading } from '@/domain/types';
-import { useReadingsSince } from '@/hooks/use-devices';
+import { useReadingsBetween, useReadingsSince } from '@/hooks/use-devices';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
 import { HISTORY_LIMIT } from '@/services/devices';
 
-const RANGES = [
-  { label: '1 h', ms: 3_600_000 },
-  { label: '6 h', ms: 6 * 3_600_000 },
-  { label: '24 h', ms: 24 * 3_600_000 },
-  { label: '7 d', ms: 7 * 24 * 3_600_000 },
-] as const;
-
 // Order requested: pH level, temperature, ammonia.
-const METRICS: { key: string; icon: AndroidSymbol; title: string; unit: string; decimals: number; pick: (r: Reading) => number | null }[] = [
-  { key: 'ph', icon: 'water_ph', title: 'pH level', unit: '', decimals: 1, pick: (r) => r.ph },
-  { key: 'temp', icon: 'device_thermostat', title: 'Temperature', unit: '°C', decimals: 1, pick: (r) => r.temperatureC },
-  { key: 'nh3', icon: 'air', title: 'Ammonia', unit: 'mV · relative', decimals: 0, pick: (r) => r.nh3GasMv },
+const METRICS: { metric: Metric; icon: AndroidSymbol }[] = [
+  { metric: 'ph', icon: 'water_ph' },
+  { metric: 'temperatureC', icon: 'device_thermostat' },
+  { metric: 'nh3GasMv', icon: 'air' },
 ];
 
-/** The three chart cards are always shown; without data they show empty frames and "—". */
+const LIVE_WINDOW_MS = 3_600_000;
+
+type Mode = 'live' | 'date';
+
 export default function AnalyticsScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { devices, device, select } = useSelectedDevice();
-  const [rangeMs, setRangeMs] = useState<number>(RANGES[2].ms);
-  const history = useReadingsSince(device?.id ?? null, rangeMs);
+  const [mode, setMode] = useState<Mode>('live');
+  const [range, setRange] = useState<DayRange>(() => ({ start: startOfDay(Date.now()), end: startOfDay(Date.now()) }));
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  const deviceId = device?.id ?? null;
+  const live = useReadingsSince(mode === 'live' ? deviceId : null, LIVE_WINDOW_MS);
+  const dated = useReadingsBetween(mode === 'date' ? deviceId : null, range.start, endOfDay(range.end));
+  const history = mode === 'live' ? live : dated;
 
   const readings = device && history.status === 'ready' ? history.data.readings : [];
   const loading = devices.status === 'loading' || (device !== null && history.status === 'loading');
   const loadError = devices.status === 'error' ? devices.message : device && history.status === 'error' ? history.message : null;
+  const multiDay = mode === 'date' && range.end !== range.start;
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
-      <TabHeader eyebrow={device?.name ?? 'No device connected'} title="Analytics">
-        {devices.status === 'ready' && <DeviceSwitcher devices={devices.data} selectedId={device?.id ?? null} onSelect={select} />}
-        <View style={styles.ranges}>
-          {RANGES.map((r) => {
-            const selected = r.ms === rangeMs;
+      <StatusBar style="light" />
+      <View style={[styles.header, headerOnTop, { backgroundColor: theme.tint, paddingTop: insets.top + Spacing.two }]}>
+        <View style={styles.headerRow}>
+          <ThemedText style={[styles.title, { color: theme.onTint }]}>Analytics</ThemedText>
+          <Pressable
+            onPress={() => router.push('/export')}
+            disabled={!device}
+            accessibilityRole="button"
+            accessibilityLabel="Export to Excel"
+            style={({ pressed }) => [styles.exportButton, { opacity: !device ? 0.4 : pressed ? 0.7 : 1 }]}>
+            <Icon name="download" size={20} color="onTint" />
+            <ThemedText type="smallBold" style={{ color: theme.onTint }}>Export</ThemedText>
+          </Pressable>
+        </View>
+        {devices.status === 'ready' && <DeviceSwitcher devices={devices.data} selectedId={deviceId} onSelect={select} />}
+        <View style={[styles.segment, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+          {(['live', 'date'] as const).map((m) => {
+            const selected = mode === m;
             return (
               <Pressable
-                key={r.label}
-                onPress={() => setRangeMs(r.ms)}
-                accessibilityRole="button"
+                key={m}
+                onPress={() => setMode(m)}
+                accessibilityRole="tab"
                 accessibilityState={{ selected }}
-                style={[styles.range, { backgroundColor: selected ? theme.background : 'rgba(255,255,255,0.18)' }]}>
-                <ThemedText type="smallBold" style={{ color: selected ? theme.tint : theme.onTint }}>{r.label}</ThemedText>
+                style={[styles.segmentItem, selected && { backgroundColor: theme.background }]}>
+                <Icon name={m === 'live' ? 'bolt' : 'calendar_month'} size={16} color={selected ? 'tint' : 'onTint'} />
+                <ThemedText type="smallBold" style={{ color: selected ? theme.tint : theme.onTint }}>{m === 'live' ? 'Live' : 'By date'}</ThemedText>
               </Pressable>
             );
           })}
         </View>
-      </TabHeader>
+      </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {(loading || !device) && (
-          <View style={styles.statusRow}>
-            {loading ? <ActivityIndicator color={theme.tint} /> : <StatusPill status="no-data" label="No device connected" />}
-          </View>
-        )}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <OfflineBanner />
+
+        <View style={[styles.contextRow, mode === 'date' && styles.contextCentered]}>
+          {mode === 'live' ? (
+            <View style={styles.liveLabel}>
+              <View style={[styles.liveDot, { backgroundColor: theme.levelNormal }]} />
+              <ThemedText type="smallBold">Last hour</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">· updates as readings arrive</ThemedText>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => setCalendarOpen(true)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.dateChip, { borderColor: theme.border, backgroundColor: pressed ? theme.backgroundElement : theme.background }]}>
+              <Icon name="calendar_month" size={18} />
+              <ThemedText type="smallBold">{formatRange(range)}</ThemedText>
+              <Icon name="expand_more" size={18} color="textSecondary" />
+            </Pressable>
+          )}
+          {loading && <ActivityIndicator color={theme.tint} style={mode === 'date' ? styles.spinnerRight : undefined} />}
+        </View>
+
+        {!device && !loading && <StatusPill status="no-data" label="No device connected" />}
         {loadError && <Notice tone="warning">{loadError}</Notice>}
         {device?.simulated && <Notice tone="warning">Simulated device: charts show generated test data.</Notice>}
         {device && history.status === 'ready' && history.data.truncated && (
           <Notice tone="warning">{`Showing the latest ${HISTORY_LIMIT.toLocaleString()} readings only.`}</Notice>
         )}
 
-        {METRICS.map((m) => {
-          const points: Point[] = readings.map((r) => ({ t: r.serverTimeMs, v: m.pick(r) }));
-          const s = stats(points.map((p) => p.v));
-          return (
-            <View key={m.key} style={[styles.card, { borderColor: theme.border }]}>
-              <View style={styles.cardTop}>
-                <View style={[styles.iconWrap, { backgroundColor: theme.backgroundElement }]}>
-                  <Icon name={m.icon} size={22} />
-                </View>
-                <ThemedText type="smallBold" style={styles.cardTitle}>{m.title}</ThemedText>
-                {m.unit ? <ThemedText type="small" themeColor="textSecondary">{m.unit}</ThemedText> : null}
-              </View>
-              <View style={styles.statsRow}>
-                <Stat label="Lowest" value={s ? formatNumber(s.min, m.decimals) : '—'} />
-                <Stat label="Average" value={s ? formatNumber(s.avg, m.decimals) : '—'} />
-                <Stat label="Highest" value={s ? formatNumber(s.max, m.decimals) : '—'} />
-              </View>
-              <LineChart points={points} decimals={m.decimals} gradientId={`grad-${m.key}`} />
-            </View>
-          );
-        })}
+        {METRICS.map(({ metric, icon }) => (
+          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} />
+        ))}
       </ScrollView>
+
+      {calendarOpen && (
+        <CalendarModal
+          visible
+          initial={range}
+          onClose={() => setCalendarOpen(false)}
+          onApply={(r) => { setRange(r); setCalendarOpen(false); }}
+        />
+      )}
     </View>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function MetricChart({ metric, icon, readings, multiDay }: { metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean }) {
   const theme = useTheme();
+  const info = METRIC_INFO[metric];
+  const points = useMemo(() => readings.map((r) => ({ t: r.serverTimeMs, v: r[metric] })), [readings, metric]);
+  const ins = useMemo(() => insight(metric, points), [metric, points]);
+  const status = classify(metric, ins.latest?.v ?? null);
+  const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
+  const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
+
   return (
-    <View style={[styles.stat, { backgroundColor: theme.backgroundElement }]}>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.statLabel}>{label}</ThemedText>
-      <ThemedText style={styles.statValue}>{value}</ThemedText>
+    <View style={[styles.card, { borderColor: theme.border }]}>
+      <View style={styles.cardTop}>
+        <Icon name={icon} size={20} />
+        <ThemedText type="smallBold" style={styles.cardTitle}>{info.name}</ThemedText>
+        <LevelChip level={status.level} label={status.label} compact />
+      </View>
+
+      <View style={styles.valueRow}>
+        <ThemedText style={styles.value}>{formatNumber(ins.latest?.v ?? null, info.decimals)}</ThemedText>
+        {info.unit ? <ThemedText themeColor="textSecondary" style={styles.unit}>{info.unit}</ThemedText> : null}
+        <View style={styles.extremes}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.extremeText} numberOfLines={1}>
+            {ins.max ? `High ${fmt(ins.max.v)} · ${when(ins.max.t)}` : 'High —'}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.extremeText} numberOfLines={1}>
+            {ins.min ? `Low ${fmt(ins.min.v)} · ${when(ins.min.t)}` : 'Low —'}
+          </ThemedText>
+        </View>
+      </View>
+
+      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal} height={130} />
+
+      <View style={[styles.insight, { backgroundColor: theme.backgroundElement }]}>
+        <Icon name="insights" size={16} />
+        <ThemedText type="small" style={styles.insightText}>{insightSentence(metric, ins)}</ThemedText>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  ranges: { flexDirection: 'row', gap: Spacing.two },
-  range: { flex: 1, alignItems: 'center', paddingVertical: Spacing.two, borderRadius: Radius.pill },
-  content: { padding: Spacing.four, gap: Spacing.three, paddingBottom: Spacing.six },
-  statusRow: { flexDirection: 'row', alignItems: 'center', minHeight: 28 },
-  card: { borderWidth: 1, borderRadius: Radius.card, padding: Spacing.three, gap: Spacing.three },
+  header: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.three, gap: Spacing.two, borderBottomLeftRadius: HEADER_CURVE, borderBottomRightRadius: HEADER_CURVE },
+  scroll: { marginTop: -HEADER_CURVE },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: 700 },
+  exportButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.pill, backgroundColor: 'rgba(255,255,255,0.18)' },
+  segment: { flexDirection: 'row', borderRadius: Radius.pill, padding: 3 },
+  segmentItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.one, paddingVertical: Spacing.two, borderRadius: Radius.pill },
+  content: { padding: Spacing.three, paddingTop: HEADER_CURVE + Spacing.two, gap: Spacing.two + 2, paddingBottom: Spacing.five },
+  contextRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 },
+  contextCentered: { justifyContent: 'center' },
+  spinnerRight: { position: 'absolute', right: 0 },
+  liveLabel: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  dateChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+  card: { borderWidth: 1, borderRadius: Radius.card, padding: Spacing.three, gap: Spacing.two },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  iconWrap: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { flex: 1, fontSize: 17 },
-  statsRow: { flexDirection: 'row', gap: Spacing.two },
-  stat: { flex: 1, borderRadius: Radius.small, paddingVertical: Spacing.two, alignItems: 'center' },
-  statLabel: { fontSize: 12, lineHeight: 16 },
-  statValue: { fontSize: 18, lineHeight: 24, fontWeight: 700 },
+  cardTitle: { flex: 1, fontSize: 16 },
+  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.one },
+  value: { fontSize: 30, lineHeight: 36, fontWeight: 700 },
+  unit: { fontSize: 14 },
+  extremes: { flex: 1, alignItems: 'flex-end' },
+  extremeText: { fontSize: 12, lineHeight: 16 },
+  insight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two + 2, paddingVertical: Spacing.two, borderRadius: Radius.small },
+  insightText: { flex: 1 },
 });

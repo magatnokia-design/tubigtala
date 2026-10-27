@@ -68,6 +68,10 @@ The APK always uses the **real** project: an installed app cannot reach the emul
 
 **Keystore:** `C:\App\tubigtala-keystore\debug.keystore` (outside the repo; never Dagitab's `C:\App\wattwise-keystore`). Android debug credentials (alias `androiddebugkey`, password `android`), fine for a sideloaded prototype, not for the Play Store. Back it up: if it is lost, new APKs will not install over old ones and the SHA-1 registered for Google sign-in changes. SHA-1 `69:2C:E1:DB:35:06:D4:D1:00:AB:EE:34:6A:87:EB:F2:0D:41:90:08`.
 
+**See an alert:** with the app open on the Water tab, stop the simulator (Ctrl+C) and run `npm run simulate -- --alert=ph` (or `temp`, `nh3`). The first 12 readings (~2 min) are critical: the card turns red, the bell count goes up, and in the installed APK a phone notification appears. Then values return to normal.
+
+**Expo Go limits:** Expo Go on Android (SDK 58) cannot load `expo-notifications`, so the permission prompt and phone notifications only work in the APK; in Expo Go the switch says "Works in the installed app". Google sign-in with real accounts also needs the APK.
+
 ## Tests
 
 ```powershell

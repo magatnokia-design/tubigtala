@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { LoadingScreen } from '@/components/loading-screen';
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
+import { DialogProvider } from '@/hooks/use-dialog';
 import { OnboardingProvider, useOnboarding } from '@/hooks/use-onboarding';
 import { isProfileComplete, useProfile } from '@/hooks/use-profile';
 import { signOut } from '@/services/auth';
@@ -27,11 +28,13 @@ const navTheme: Theme = {
 export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
-      <AuthProvider>
-        <OnboardingProvider>
-          <RootNavigator />
-        </OnboardingProvider>
-      </AuthProvider>
+      <DialogProvider>
+        <AuthProvider>
+          <OnboardingProvider>
+            <RootNavigator />
+          </OnboardingProvider>
+        </AuthProvider>
+      </DialogProvider>
     </ThemeProvider>
   );
 }

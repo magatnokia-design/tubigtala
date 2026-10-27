@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
@@ -8,7 +8,7 @@ import { downsample, stats, type Point } from '@/domain/readings';
 import { formatClock, formatDateTime } from '@/domain/format';
 import { useTheme } from '@/hooks/use-theme';
 
-const HEIGHT = 170;
+const DEFAULT_HEIGHT = 150;
 const PAD = { top: 12, right: 12, bottom: 22, left: 40 };
 const MAX_POINTS = 160;
 
@@ -16,13 +16,17 @@ const MAX_POINTS = 160;
  * Line + soft area chart drawn with SVG. Missing values (null) break the line rather than
  * dropping to zero; the y-range fits the data with a little headroom.
  */
-export function LineChart({ points, decimals, color, gradientId }: {
+export function LineChart({ points, decimals, color, gradientId, band, height = DEFAULT_HEIGHT }: {
   points: Point[];
   decimals: number;
   color?: string;
   /** unique per chart on screen (SVG gradient ids are global) */
   gradientId: string;
+  /** normal range, shaded behind the line */
+  band?: [number, number];
+  height?: number;
 }) {
+  const HEIGHT = height;
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const stroke = color ?? theme.tint;
@@ -32,7 +36,7 @@ export function LineChart({ points, decimals, color, gradientId }: {
   if (!s || data.length < 2) {
     // Empty frame with the same grid as a real chart, so the layout stays the same.
     return (
-      <View style={styles.empty}>
+      <View style={[styles.empty, { height: HEIGHT }]}>
         {[0.2, 0.5, 0.8].map((f) => (
           <View key={f} style={[styles.emptyLine, { top: `${f * 100}%`, borderColor: theme.border }]} />
         ))}
@@ -70,7 +74,7 @@ export function LineChart({ points, decimals, color, gradientId }: {
   const ticks = [yMax - (yMax - yMin) * 0.1, (yMin + yMax) / 2, yMin + (yMax - yMin) * 0.1];
 
   return (
-    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={styles.wrap}>
+    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height: HEIGHT }}>
       {width > 0 && (
         <Svg width={width} height={HEIGHT}>
           <Defs>
@@ -87,6 +91,11 @@ export function LineChart({ points, decimals, color, gradientId }: {
               {v.toFixed(decimals)}
             </SvgText>
           ))}
+          {band && (() => {
+            const top = Math.max(PAD.top, Math.min(PAD.top + plotH, y(band[1])));
+            const bottom = Math.max(PAD.top, Math.min(PAD.top + plotH, y(band[0])));
+            return bottom - top > 0 ? <Rect x={PAD.left} y={top} width={plotW} height={bottom - top} fill={theme.levelNormal} opacity={0.08} /> : null;
+          })()}
           <Path d={area} fill={`url(#${gradientId})`} />
           <Path d={line} stroke={stroke} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
           <Circle cx={x(last.t)} cy={y(last.v as number)} r={5} fill={stroke} stroke={theme.background} strokeWidth={2} />
@@ -101,7 +110,6 @@ export function LineChart({ points, decimals, color, gradientId }: {
 }
 
 const styles = StyleSheet.create({
-  wrap: { height: HEIGHT },
-  empty: { height: HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  empty: { alignItems: 'center', justifyContent: 'center' },
   emptyLine: { position: 'absolute', left: PAD.left, right: PAD.right, borderTopWidth: 1, borderStyle: 'dashed' },
 });
