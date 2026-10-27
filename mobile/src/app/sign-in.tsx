@@ -10,6 +10,7 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { emailError } from '@/domain/validation';
+import { useForm } from '@/hooks/use-form';
 import { useTheme } from '@/hooks/use-theme';
 import { authErrorMessage, signIn, signInWithGoogle } from '@/services/auth';
 import { usingEmulator } from '@/services/firebase';
@@ -22,9 +23,10 @@ type Busy = null | 'password' | 'google';
 export default function SignInScreen() {
   const theme = useTheme();
   const passwordRef = useRef<TextInputInstance>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const form = useForm({ email: '', password: '' }, {
+    email: emailError,
+    password: (v) => (v ? undefined : 'Enter your password.'),
+  });
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
 
@@ -41,10 +43,8 @@ export default function SignInScreen() {
   }
 
   function submit() {
-    const next = { email: emailError(email), password: password ? undefined : 'Enter your password.' };
-    setErrors(next);
-    if (next.email || next.password) return;
-    run('password', () => signIn(email, password));
+    if (!form.validateAll()) return;
+    run('password', () => signIn(form.values.email, form.values.password));
   }
 
   return (
@@ -52,9 +52,10 @@ export default function SignInScreen() {
       <TextField
         label="Email"
         icon="mail"
-        value={email}
-        onChangeText={setEmail}
-        error={errors.email}
+        value={form.values.email}
+        onChangeText={form.set('email')}
+        onBlur={form.blur('email')}
+        error={form.errors.email}
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
@@ -68,9 +69,10 @@ export default function SignInScreen() {
         label="Password"
         icon="lock"
         password
-        value={password}
-        onChangeText={setPassword}
-        error={errors.password}
+        value={form.values.password}
+        onChangeText={form.set('password')}
+        onBlur={form.blur('password')}
+        error={form.errors.password}
         autoComplete="password"
         returnKeyType="go"
         onSubmitEditing={submit}
@@ -96,11 +98,11 @@ export default function SignInScreen() {
 
       {usingEmulator && (
         <View style={styles.demo}>
-          <Notice>Local emulator mode: test accounts and simulated data, reset when the emulators restart.</Notice>
+          <Notice>Emulator mode: test accounts and simulated data.</Notice>
           <Button
             label="Fill in the demo account"
             variant="text"
-            onPress={() => { setEmail(DEMO.email); setPassword(DEMO.password); }}
+            onPress={() => { form.set('email')(DEMO.email); form.set('password')(DEMO.password); }}
             disabled={busy !== null}
           />
         </View>

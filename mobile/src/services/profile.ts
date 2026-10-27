@@ -32,7 +32,8 @@ export function createProfile(uid: string, displayName: string, phoneE164: strin
   return setDoc(profileRef(uid), {
     displayName: displayName.trim(),
     phoneE164,
-    smsAlertsEnabled: false,
+    // Entering a number opts the user in to SMS alerts; they can switch it off in Settings.
+    smsAlertsEnabled: phoneE164 !== null,
     pushEnabled: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

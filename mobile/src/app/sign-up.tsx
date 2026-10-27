@@ -13,6 +13,7 @@ import { formatNationalInput, normalizePhMobile } from '@/domain/phone';
 import {
   confirmPasswordError, emailError, nameError, newPasswordError, PASSWORD_MIN, phoneError,
 } from '@/domain/validation';
+import { useForm } from '@/hooks/use-form';
 import { useTheme } from '@/hooks/use-theme';
 import { authErrorMessage, signInWithGoogle, signUp } from '@/services/auth';
 
@@ -25,12 +26,17 @@ export default function SignUpScreen() {
   const phoneRef = useRef<TextInputInstance>(null);
   const passwordRef = useRef<TextInputInstance>(null);
   const confirmRef = useRef<TextInputInstance>(null);
-  const [values, setValues] = useState<Record<Field, string>>({ name: '', email: '', phone: '', password: '', confirm: '' });
-  const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const form = useForm<Field>({ name: '', email: '', phone: '', password: '', confirm: '' }, {
+    name: nameError,
+    email: emailError,
+    phone: phoneError,
+    password: newPasswordError,
+    confirm: (v, all) => confirmPasswordError(all.password, v),
+  });
+  const { values, errors } = form;
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
 
-  const set = (field: Field) => (text: string) => setValues((v) => ({ ...v, [field]: text }));
 
   async function run(kind: Exclude<Busy, null>, action: () => Promise<unknown>) {
     setFormError(null);
@@ -45,15 +51,7 @@ export default function SignUpScreen() {
   }
 
   function submit() {
-    const next: Partial<Record<Field, string>> = {
-      name: nameError(values.name),
-      email: emailError(values.email),
-      phone: phoneError(values.phone),
-      password: newPasswordError(values.password),
-      confirm: confirmPasswordError(values.password, values.confirm),
-    };
-    setErrors(next);
-    if (Object.values(next).some(Boolean)) return;
+    if (!form.validateAll()) return;
     const phone = normalizePhMobile(values.phone);
     if (!phone) return; // unreachable: phoneError passed
     run('email', () => signUp(values.name, values.email, values.password, phone));
@@ -64,29 +62,29 @@ export default function SignUpScreen() {
   return (
     <AuthScaffold title="Create your account" subtitle="It takes a minute. Your number is used for SMS alerts.">
       <TextField
-        label="Full name" icon="person" value={values.name} onChangeText={set('name')} error={errors.name}
+        label="Full name" icon="person" value={values.name} onChangeText={form.set('name')} onBlur={form.blur('name')} error={errors.name}
         autoComplete="name" autoCapitalize="words" placeholder="Juan Dela Cruz"
         returnKeyType="next" onSubmitEditing={() => emailRef.current?.focus()} editable={editable}
       />
       <TextField
-        ref={emailRef} label="Email" icon="mail" value={values.email} onChangeText={set('email')} error={errors.email}
+        ref={emailRef} label="Email" icon="mail" value={values.email} onChangeText={form.set('email')} onBlur={form.blur('email')} error={errors.email}
         autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="you@example.com"
         returnKeyType="next" onSubmitEditing={() => phoneRef.current?.focus()} editable={editable}
       />
       <TextField
         ref={phoneRef} label="Mobile number" icon="phone_iphone" prefix="+63"
-        value={formatNationalInput(values.phone)} onChangeText={(t) => set('phone')(t.replace(/\D/g, '').replace(/^0/, ''))}
-        error={errors.phone} hint="10-digit PH mobile number starting with 9"
+        value={formatNationalInput(values.phone)} onChangeText={(t) => form.set('phone')(t.replace(/\D/g, '').replace(/^0/, ''))}
+        onBlur={form.blur('phone')} error={errors.phone} hint="Used for SMS alerts"
         keyboardType="phone-pad" autoComplete="tel" placeholder="9XX XXX XXXX" maxLength={12}
         returnKeyType="next" onSubmitEditing={() => passwordRef.current?.focus()} editable={editable}
       />
       <TextField
-        ref={passwordRef} label="Password" icon="lock" password value={values.password} onChangeText={set('password')}
+        ref={passwordRef} label="Password" icon="lock" password value={values.password} onChangeText={form.set('password')} onBlur={form.blur('password')}
         error={errors.password} hint={`At least ${PASSWORD_MIN} characters, with letters and numbers`}
         autoComplete="new-password" returnKeyType="next" onSubmitEditing={() => confirmRef.current?.focus()} editable={editable}
       />
       <TextField
-        ref={confirmRef} label="Confirm password" icon="lock" password value={values.confirm} onChangeText={set('confirm')}
+        ref={confirmRef} label="Confirm password" icon="lock" password value={values.confirm} onChangeText={form.set('confirm')} onBlur={form.blur('confirm')}
         error={errors.confirm} autoComplete="new-password" returnKeyType="go" onSubmitEditing={submit} editable={editable}
       />
 

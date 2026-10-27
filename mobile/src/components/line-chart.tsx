@@ -30,9 +30,13 @@ export function LineChart({ points, decimals, color, gradientId }: {
   const s = stats(data.map((p) => p.v));
 
   if (!s || data.length < 2) {
+    // Empty frame with the same grid as a real chart, so the layout stays the same.
     return (
-      <View style={[styles.empty, { backgroundColor: theme.backgroundElement }]}>
-        <ThemedText type="small" themeColor="textSecondary">Not enough readings in this range for a chart.</ThemedText>
+      <View style={styles.empty}>
+        {[0.2, 0.5, 0.8].map((f) => (
+          <View key={f} style={[styles.emptyLine, { top: `${f * 100}%`, borderColor: theme.border }]} />
+        ))}
+        <ThemedText type="small" themeColor="textSecondary">No data yet</ThemedText>
       </View>
     );
   }
@@ -98,5 +102,6 @@ export function LineChart({ points, decimals, color, gradientId }: {
 
 const styles = StyleSheet.create({
   wrap: { height: HEIGHT },
-  empty: { height: HEIGHT, borderRadius: 12, alignItems: 'center', justifyContent: 'center', padding: 16 },
+  empty: { height: HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  emptyLine: { position: 'absolute', left: PAD.left, right: PAD.right, borderTopWidth: 1, borderStyle: 'dashed' },
 });

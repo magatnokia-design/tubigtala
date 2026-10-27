@@ -23,8 +23,8 @@ Created at sign-up (email) or on the "Complete your profile" screen (Google). Th
 |---|---|---|
 | `displayName` | string | 1–60 characters. |
 | `phoneE164` | string \| null | Philippine mobile number, `+639XXXXXXXXX` (pattern enforced by rules and `mobile/src/domain/phone.ts`). Personal data: never log it. |
-| `smsAlertsEnabled` | boolean | User wants SMS alerts. Cannot be `true` while `phoneE164` is `null`. **Nothing sends SMS yet** (needs Cloud Functions). |
-| `pushEnabled` | boolean | User allowed app notifications and Android granted the permission. Nothing sends push yet. |
+| `smsAlertsEnabled` | boolean | User wants SMS alerts. Cannot be `true` while `phoneE164` is `null`. Set to `true` whenever the app saves a number (sign-up, complete profile, editing the number); the user can switch it off. **Nothing sends SMS yet** (needs Cloud Functions). |
+| `pushEnabled` | boolean | User allowed app notifications and Android granted the permission. The app asks once per account per phone on first entry (after onboarding), then only via the Settings switch. Nothing sends push yet. |
 | `createdAt` | timestamp | Server time at creation, never changed. |
 | `updatedAt` | timestamp | Server time of the last write (rules require `== request.time`). |
 

@@ -42,6 +42,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Settings shows mobile/app.json's version; the APK file name uses this input. Keep them equal.
+      - name: Check version matches app.json
+        run: |
+          APP=$(node -p "require('./app.json').expo.version")
+          [ "$APP" = "${{ inputs.version }}" ] || { echo "::error::version input ${{ inputs.version }} does not match mobile/app.json ($APP)"; exit 1; }
+
       # Fail in seconds, not after a 15-minute build that would crash on launch
       # (mobile/src/services/firebase.ts throws when real config is missing).
       - name: Check Firebase config variables

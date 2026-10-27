@@ -27,53 +27,50 @@ const navTheme: Theme = {
 export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
-      <OnboardingProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <OnboardingProvider>
           <RootNavigator />
-        </AuthProvider>
-      </OnboardingProvider>
+        </OnboardingProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
 
 /**
  * Which part of the app is reachable, in order:
- * onboarding (first launch) -> sign in / sign up -> complete profile (no phone yet) -> app.
+ * sign in / sign up -> complete profile (no phone yet) -> onboarding (once per account) -> app.
  */
 function RootNavigator() {
   const { user, initializing } = useAuth();
-  const { seen } = useOnboarding();
   const profile = useProfile();
+  const { seen } = useOnboarding();
 
-  const deciding = initializing || seen === null;
   useEffect(() => {
-    if (!deciding) SplashScreen.hideAsync();
-  }, [deciding]);
+    if (!initializing) SplashScreen.hideAsync();
+  }, [initializing]);
 
-  if (deciding) return null; // native splash stays up
+  if (initializing) return null; // native splash stays up while the saved session is restored
 
-  if (seen && user && profile.status === 'loading') {
-    return <LoadingScreen message="Loading your account…" action={{ label: 'Sign out', onPress: () => signOut() }} />;
-  }
-  if (seen && user && profile.status === 'error') {
-    return <LoadingScreen error={profile.message} action={{ label: 'Sign out', onPress: () => signOut() }} />;
-  }
+  const signOutAction = { label: 'Sign out', onPress: () => signOut() };
+  if (user && profile.status === 'loading') return <LoadingScreen message="Loading your account…" action={signOutAction} />;
+  if (user && profile.status === 'error') return <LoadingScreen error={profile.message} action={signOutAction} />;
 
   const ready = profile.status === 'ready' && isProfileComplete(profile.data);
+  if (user && ready && seen === null) return <LoadingScreen action={signOutAction} />;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!seen}>
-        <Stack.Screen name="onboarding" />
-      </Stack.Protected>
-      <Stack.Protected guard={!!seen && !user}>
+      <Stack.Protected guard={!user}>
         <Stack.Screen name="sign-in" />
         <Stack.Screen name="sign-up" />
       </Stack.Protected>
-      <Stack.Protected guard={!!seen && !!user && !ready}>
+      <Stack.Protected guard={!!user && !ready}>
         <Stack.Screen name="complete-profile" />
       </Stack.Protected>
-      <Stack.Protected guard={!!seen && !!user && ready}>
+      <Stack.Protected guard={!!user && ready && seen === false}>
+        <Stack.Screen name="onboarding" />
+      </Stack.Protected>
+      <Stack.Protected guard={!!user && ready && seen === true}>
         <Stack.Screen name="(app)" />
       </Stack.Protected>
     </Stack>

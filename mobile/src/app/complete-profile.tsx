@@ -12,6 +12,7 @@ import { formatNationalInput, normalizePhMobile } from '@/domain/phone';
 import { nameError, phoneError } from '@/domain/validation';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfile } from '@/hooks/use-profile';
+import { useForm } from '@/hooks/use-form';
 import { useTheme } from '@/hooks/use-theme';
 import { authErrorMessage, signOut } from '@/services/auth';
 import { createProfile, updateProfile } from '@/services/profile';
@@ -26,22 +27,19 @@ export default function CompleteProfileScreen() {
   const profile = useProfile();
   const existing = profile.status === 'ready' ? profile.data : null;
 
-  const [name, setName] = useState(existing?.displayName || user?.displayName || '');
-  const [phone, setPhone] = useState('');
-  const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
+  const form = useForm({ name: existing?.displayName || user?.displayName || '', phone: '' }, { name: nameError, phone: phoneError });
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
-    const next = { name: nameError(name), phone: phoneError(phone) };
-    setErrors(next);
-    const e164 = normalizePhMobile(phone);
-    if (next.name || next.phone || !e164 || !user) return;
+    const e164 = normalizePhMobile(form.values.phone);
+    if (!form.validateAll() || !e164 || !user) return;
     setFormError(null);
     setBusy(true);
     try {
-      if (existing) await updateProfile(user.uid, { displayName: name, phoneE164: e164 });
-      else await createProfile(user.uid, name, e164);
+      // Entering a number opts the user in to SMS alerts (switchable in Settings).
+      if (existing) await updateProfile(user.uid, { displayName: form.values.name, phoneE164: e164, smsAlertsEnabled: true });
+      else await createProfile(user.uid, form.values.name, e164);
       // The root layout opens the app once the saved profile arrives.
     } catch (e) {
       setFormError(authErrorMessage(e));
@@ -60,13 +58,13 @@ export default function CompleteProfileScreen() {
       </View>
 
       <TextField
-        label="Full name" icon="person" value={name} onChangeText={setName} error={errors.name}
-        autoComplete="name" autoCapitalize="words" editable={!busy}
+        label="Full name" icon="person" value={form.values.name} onChangeText={form.set('name')} onBlur={form.blur('name')}
+        error={form.errors.name} autoComplete="name" autoCapitalize="words" editable={!busy}
       />
       <TextField
         label="Mobile number" icon="phone_iphone" prefix="+63"
-        value={formatNationalInput(phone)} onChangeText={(t) => setPhone(t.replace(/\D/g, '').replace(/^0/, ''))}
-        error={errors.phone} hint="10-digit PH mobile number starting with 9. Used only for your alerts."
+        value={formatNationalInput(form.values.phone)} onChangeText={(t) => form.set('phone')(t.replace(/\D/g, '').replace(/^0/, ''))}
+        onBlur={form.blur('phone')} error={form.errors.phone} hint="Used for SMS alerts"
         keyboardType="phone-pad" autoComplete="tel" placeholder="9XX XXX XXXX" maxLength={12}
         returnKeyType="done" onSubmitEditing={submit} editable={!busy} autoFocus
       />

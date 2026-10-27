@@ -26,6 +26,10 @@ function greeting(now: number): string {
   return 'Good evening';
 }
 
+/**
+ * The three reading cards are always shown. Without a device or a reading they show "—"
+ * (never made-up values), so the layout is visible before any hardware is connected.
+ */
 export default function WaterScreen() {
   const theme = useTheme();
   const now = useNow();
@@ -36,6 +40,13 @@ export default function WaterScreen() {
 
   const firstName = profile.status === 'ready' ? profile.data?.displayName.split(' ')[0] ?? '' : '';
   const unread = notifications.status === 'ready' ? notifications.data.filter((n) => !n.read).length : 0;
+
+  const reading = device && latest.status === 'ready' ? latest.data : null;
+  const loading = devices.status === 'loading' || (device !== null && latest.status === 'loading');
+  const status = reading && device ? deviceStatus(reading.serverTimeMs, device.readingIntervalSec, now) : 'no-data';
+  const dimmed = status !== 'live';
+  const sim: Tag[] = reading?.simulated ? [{ label: 'Simulated', tone: 'warning' }] : [];
+  const loadError = devices.status === 'error' ? devices.message : device && latest.status === 'error' ? latest.message : null;
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
@@ -49,90 +60,60 @@ export default function WaterScreen() {
       </TabHeader>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {devices.status === 'loading' && <ActivityIndicator style={styles.loading} color={theme.tint} />}
-        {devices.status === 'error' && <Notice tone="warning">{devices.message}</Notice>}
-        {devices.status === 'ready' && !device && (
-          <EmptyState
-            icon="sensors_off"
-            title="No device yet"
-            body="Your TubigTala device appears here once it is linked to this account."
+        <View style={styles.statusRow}>
+          {loading ? (
+            <ActivityIndicator color={theme.tint} />
+          ) : (
+            <StatusPill status={status} label={device ? undefined : 'No device connected'} />
+          )}
+          {reading && <ThemedText type="small" themeColor="textSecondary">Updated {formatAge(now - reading.serverTimeMs)}</ThemedText>}
+        </View>
+
+        {loadError && <Notice tone="warning">{loadError}</Notice>}
+        {device?.simulated && <Notice tone="warning">Simulated device: values are generated for testing.</Notice>}
+
+        <MetricCard
+          icon="water_ph"
+          label="pH level"
+          value={formatNumber(reading?.ph ?? null, 1)}
+          description={reading ? phDescriptor(reading.ph) : 'Waiting for data'}
+          dimmed={dimmed}
+          tags={[...(reading && !reading.phCalibrated ? [{ label: 'Uncalibrated', tone: 'warning' as const }] : []), ...sim]}>
+          <ScaleBar
+            value={reading?.ph ?? null}
+            min={0}
+            max={14}
+            segments={[{ until: 6.5, color: theme.scaleAcid }, { until: 7.5, color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
+            labels={['0 Acidic', '7 Neutral', 'Basic 14']}
           />
-        )}
+        </MetricCard>
 
-        {device && latest.status === 'loading' && <ActivityIndicator style={styles.loading} color={theme.tint} />}
-        {device && latest.status === 'error' && <Notice tone="warning">{latest.message}</Notice>}
-        {device && latest.status === 'ready' && !latest.data && (
-          <EmptyState icon="hourglass_empty" title="Waiting for the first reading" body="Readings appear here as soon as the device sends one." />
-        )}
+        <MetricCard
+          icon="device_thermostat"
+          label="Temperature"
+          value={formatNumber(reading?.temperatureC ?? null, 1)}
+          unit="°C"
+          description={reading ? 'Water temperature' : 'Waiting for data'}
+          dimmed={dimmed}
+          tags={sim}>
+          <ScaleBar
+            value={reading?.temperatureC ?? null}
+            min={0}
+            max={40}
+            segments={[{ until: 20, color: theme.scaleCool }, { until: 40, color: theme.scaleWarm }]}
+            labels={['0 °C', '20 °C', '40 °C']}
+          />
+        </MetricCard>
 
-        {device && latest.status === 'ready' && latest.data && (() => {
-          const r = latest.data;
-          const status = deviceStatus(r.serverTimeMs, device.readingIntervalSec, now);
-          const dimmed = status !== 'live';
-          const sim: Tag[] = r.simulated ? [{ label: 'Simulated data', tone: 'warning' }] : [];
-          return (
-            <>
-              <View style={styles.statusRow}>
-                <StatusPill status={status} />
-                <ThemedText type="small" themeColor="textSecondary">Updated {formatAge(now - r.serverTimeMs)}</ThemedText>
-              </View>
-
-              {device.simulated && (
-                <Notice tone="warning">Simulated device: these values are generated for testing, not measured by a sensor.</Notice>
-              )}
-              {status === 'offline' && (
-                <Notice tone="warning">The device has not reported for a while. These are the last values received.</Notice>
-              )}
-
-              <MetricCard
-                icon="water_ph"
-                label="pH level"
-                value={formatNumber(r.ph, 1)}
-                description={phDescriptor(r.ph)}
-                dimmed={dimmed}
-                tags={[...(r.phCalibrated ? [] : [{ label: 'Uncalibrated probe', tone: 'warning' as const }]), ...sim]}>
-                <ScaleBar
-                  value={r.ph}
-                  min={0}
-                  max={14}
-                  segments={[{ until: 6.5, color: theme.scaleAcid }, { until: 7.5, color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
-                  labels={['0 Acidic', '7 Neutral', 'Basic 14']}
-                />
-              </MetricCard>
-
-              <MetricCard
-                icon="device_thermostat"
-                label="Temperature"
-                value={formatNumber(r.temperatureC, 1)}
-                unit="°C"
-                description="Water temperature"
-                dimmed={dimmed}
-                tags={sim}>
-                <ScaleBar
-                  value={r.temperatureC}
-                  min={0}
-                  max={40}
-                  segments={[{ until: 20, color: theme.scaleCool }, { until: 40, color: theme.scaleWarm }]}
-                  labels={['0 °C', '20 °C', '40 °C']}
-                />
-              </MetricCard>
-
-              <MetricCard
-                icon="air"
-                label="Ammonia"
-                value={formatNumber(r.nh3GasMv, 0)}
-                unit="mV"
-                description="Ammonia gas in the air above the water"
-                dimmed={dimmed}
-                tags={[{ label: 'Relative, not ppm', tone: 'info' }, { label: 'Uncalibrated', tone: 'warning' }, ...sim]}
-              />
-
-              <ThemedText type="small" themeColor="textSecondary" style={styles.disclaimer}>
-                Monitoring aid only. Not a certified drinking-water test.
-              </ThemedText>
-            </>
-          );
-        })()}
+        <MetricCard
+          icon="air"
+          label="Ammonia"
+          value={formatNumber(reading?.nh3GasMv ?? null, 0)}
+          unit="mV"
+          description={reading ? 'Gas above the water' : 'Waiting for data'}
+          dimmed={dimmed}
+          tags={[{ label: 'Relative, not ppm', tone: 'info' }, ...sim]}
+        />
       </ScrollView>
     </View>
   );
@@ -156,33 +137,14 @@ function Bell({ unread }: { unread: number }) {
   );
 }
 
-function EmptyState({ icon, title, body }: { icon: 'sensors_off' | 'hourglass_empty'; title: string; body: string }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.empty}>
-      <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundElement }]}>
-        <Icon name={icon} size={40} />
-      </View>
-      <ThemedText type="smallBold" style={styles.emptyTitle}>{title}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.center}>{body}</ThemedText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { padding: Spacing.four, gap: Spacing.three, paddingBottom: Spacing.six },
-  loading: { marginTop: Spacing.six },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap', minHeight: 28 },
   bell: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
   badge: {
     position: 'absolute', top: 4, right: 4, minWidth: 20, height: 20, borderRadius: Radius.pill,
     paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 2,
   },
   badgeText: { fontSize: 11, lineHeight: 14, fontWeight: 700 },
-  empty: { alignItems: 'center', gap: Spacing.two, marginTop: Spacing.six, paddingHorizontal: Spacing.four },
-  emptyIcon: { width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { fontSize: 18, lineHeight: 24 },
-  center: { textAlign: 'center' },
-  disclaimer: { textAlign: 'center', marginTop: Spacing.two },
 });

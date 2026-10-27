@@ -31,7 +31,7 @@ export default function NotificationsScreen() {
           </View>
           <ThemedText type="smallBold" style={styles.emptyTitle}>No notifications yet</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-            Alerts about your water will appear here once alerts are set up.
+            Alerts about your water will show up here.
           </ThemedText>
         </View>
       }

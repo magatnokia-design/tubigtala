@@ -1,10 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import type { AndroidSymbol } from 'expo-symbols';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 
-import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { Notice } from '@/components/notice';
 import { TabHeader } from '@/components/tab-header';
@@ -12,7 +11,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { formatPhMobile } from '@/domain/phone';
 import { useAuth } from '@/hooks/use-auth';
-import { useOnboarding } from '@/hooks/use-onboarding';
 import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/services/auth';
@@ -21,18 +19,24 @@ import { updateProfile } from '@/services/profile';
 
 type Pending = null | 'sms' | 'push';
 
+function confirmSignOut() {
+  Alert.alert('Sign out?', undefined, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Sign out', style: 'destructive', onPress: () => { signOut(); } },
+  ]);
+}
+
 export default function SettingsScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   const profile = useProfile();
-  const { replay } = useOnboarding();
   const [pending, setPending] = useState<Pending>(null);
-  const [message, setMessage] = useState<{ text: string; openSettings?: boolean } | null>(null);
+  const [error, setError] = useState<{ text: string; openSettings?: boolean } | null>(null);
   const [osPermission, setOsPermission] = useState<boolean | null>(null);
 
   const p = profile.status === 'ready' ? profile.data : null;
 
-  // Android can revoke the permission behind the app's back; say so if the switch is on.
+  // Android can revoke the permission behind the app's back; flag it if the switch is on.
   useEffect(() => {
     if (!p?.pushEnabled) return;
     let alive = true;
@@ -46,26 +50,26 @@ export default function SettingsScreen() {
   const uid = user.uid;
 
   async function toggleSms(on: boolean) {
-    setMessage(null);
+    setError(null);
     setPending('sms');
     try {
       await updateProfile(uid, { smsAlertsEnabled: on });
     } catch {
-      setMessage({ text: 'Could not save. Check your connection and try again.' });
+      setError({ text: 'Could not save. Try again.' });
     } finally {
       setPending(null);
     }
   }
 
   async function togglePush(on: boolean) {
-    setMessage(null);
+    setError(null);
     setPending('push');
     try {
       if (on) {
         const result = await requestNotificationPermission();
         if (result !== 'granted') {
-          setMessage(result === 'blocked'
-            ? { text: 'Notifications are turned off for TubigTala in Android settings. Turn them on there first.', openSettings: true }
+          setError(result === 'blocked'
+            ? { text: 'Notifications are off in Android settings.', openSettings: true }
             : { text: 'Notifications were not allowed.' });
           return;
         }
@@ -73,20 +77,25 @@ export default function SettingsScreen() {
       }
       await updateProfile(uid, { pushEnabled: on });
     } catch {
-      setMessage({ text: 'Could not change notifications. Try again.' });
+      setError({ text: 'Could not save. Try again.' });
     } finally {
       setPending(null);
     }
   }
 
   const initials = p.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
+  const switchColors = { trackColor: { true: theme.tint, false: theme.border }, thumbColor: theme.background };
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
       <TabHeader title="Settings" />
       <ScrollView contentContainerStyle={styles.content}>
         <Section title="Account">
-          <View style={styles.account}>
+          <Pressable
+            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'name' } })}
+            accessibilityRole="button"
+            accessibilityLabel="Edit name"
+            style={({ pressed }) => [styles.account, pressed && { backgroundColor: theme.backgroundElement }]}>
             <View style={[styles.avatar, { backgroundColor: theme.tint }]}>
               <ThemedText style={[styles.avatarText, { color: theme.onTint }]}>{initials}</ThemedText>
             </View>
@@ -94,56 +103,48 @@ export default function SettingsScreen() {
               <ThemedText type="smallBold" style={styles.name}>{p.displayName}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">{user.email ?? ''}</ThemedText>
             </View>
-          </View>
-          <Row icon="edit" label="Edit name and number" onPress={() => router.push('/edit-profile')} chevron />
-          <Row icon="logout" label="Sign out" onPress={() => signOut()} />
+            <Icon name="chevron_right" color="textSecondary" />
+          </Pressable>
+          <Row icon="logout" label="Sign out" onPress={confirmSignOut} />
         </Section>
 
         <Section title="SMS">
-          <Row icon="phone_iphone" label="Mobile number" value={p.phoneE164 ? formatPhMobile(p.phoneE164) : 'Not set'} onPress={() => router.push('/edit-profile')} chevron />
+          <Row
+            icon="phone_iphone"
+            label="Mobile number"
+            value={p.phoneE164 ? formatPhMobile(p.phoneE164) : 'Not set'}
+            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'phone' } })}
+            chevron
+          />
           <Row
             icon="sms"
             label="SMS alerts"
             right={pending === 'sms'
               ? <ActivityIndicator color={theme.tint} />
-              : <Switch value={p.smsAlertsEnabled} onValueChange={toggleSms} disabled={pending !== null || !p.phoneE164}
-                  trackColor={{ true: theme.tint, false: theme.border }} thumbColor={theme.background} />}
+              : <Switch value={p.smsAlertsEnabled} onValueChange={toggleSms} disabled={pending !== null || !p.phoneE164} {...switchColors} />}
           />
-          <ThemedText type="small" themeColor="textSecondary" style={styles.footnote}>
-            Your choice is saved now. Sending SMS starts once alerts are set up, which is not available yet.
-          </ThemedText>
         </Section>
 
         <Section title="Notifications">
           <Row
             icon="notifications_active"
             label="Allow notifications"
+            value={p.pushEnabled && osPermission === false ? 'Off in Android settings' : undefined}
             right={pending === 'push'
               ? <ActivityIndicator color={theme.tint} />
-              : <Switch value={p.pushEnabled} onValueChange={togglePush} disabled={pending !== null}
-                  trackColor={{ true: theme.tint, false: theme.border }} thumbColor={theme.background} />}
+              : <Switch value={p.pushEnabled} onValueChange={togglePush} disabled={pending !== null} {...switchColors} />}
           />
-          {p.pushEnabled && osPermission === false && (
-            <Notice tone="warning">Android has notifications turned off for TubigTala, so none will appear.</Notice>
-          )}
-          <ThemedText type="small" themeColor="textSecondary" style={styles.footnote}>
-            Alerts will appear on the Water tab bell and, when allowed, as phone notifications once alerts are set up.
-          </ThemedText>
         </Section>
 
-        {message && (
-          <View style={styles.message}>
-            <Notice tone="warning">{message.text}</Notice>
-            {message.openSettings && <Button label="Open Android settings" variant="outline" icon="settings" onPress={() => Linking.openSettings()} />}
+        {error && (
+          <View style={styles.error}>
+            <Notice tone="warning">{error.text}</Notice>
+            {error.openSettings && <Row icon="settings" label="Open Android settings" onPress={() => Linking.openSettings()} chevron />}
           </View>
         )}
 
-        <Section title="Help">
-          <Row icon="menu_book" label="How to use TubigTala" onPress={replay} chevron />
-        </Section>
-
-        <ThemedText type="small" themeColor="textSecondary" style={styles.about}>
-          {`TubigTala ${Constants.expoConfig?.version ?? ''} · Prototype monitoring aid, not a certified drinking-water test.`}
+        <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
+          {`Version ${Constants.expoConfig?.version ?? ''}`}
         </ThemedText>
       </ScrollView>
     </View>
@@ -199,7 +200,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, lineHeight: 24 },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, minHeight: 56 },
   rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  footnote: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
-  message: { gap: Spacing.two },
-  about: { textAlign: 'center' },
+  error: { gap: Spacing.two },
+  version: { textAlign: 'center' },
 });

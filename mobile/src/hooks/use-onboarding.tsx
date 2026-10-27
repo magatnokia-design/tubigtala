@@ -1,36 +1,38 @@
-// Whether this phone has seen the "How to use TubigTala" slides. Stored on the device only
-// (a per-device convenience, not account data); if storage fails, the slides simply show again.
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Whether the signed-in account has seen the onboarding slides on this phone. Shown once per
+// account, after sign-up / first sign-in (not on install).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-const KEY = 'tubigtala.onboarding.v1';
+import { useAuth } from '@/hooks/use-auth';
+import { getFlag, setFlag } from '@/services/local-flags';
 
 interface OnboardingState {
-  /** null while reading storage */
+  /** null while reading storage, or when nobody is signed in */
   seen: boolean | null;
   finish: () => void;
-  replay: () => void;
 }
 
-const OnboardingContext = createContext<OnboardingState>({ seen: null, finish: () => {}, replay: () => {} });
+const OnboardingContext = createContext<OnboardingState>({ seen: null, finish: () => {} });
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const [seen, setSeen] = useState<boolean | null>(null);
+  const uid = useAuth().user?.uid ?? null;
+  const [state, setState] = useState<{ uid: string; seen: boolean } | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((v) => setSeen(v === 'done'))
-      .catch(() => setSeen(false));
-  }, []);
+    if (!uid) return;
+    let alive = true;
+    getFlag('onboarding', uid).then((seen) => alive && setState({ uid, seen }));
+    return () => { alive = false; };
+  }, [uid]);
 
   const finish = useCallback(() => {
-    setSeen(true);
-    AsyncStorage.setItem(KEY, 'done').catch(() => undefined);
-  }, []);
+    if (!uid) return;
+    setState({ uid, seen: true });
+    setFlag('onboarding', uid);
+  }, [uid]);
 
-  const replay = useCallback(() => setSeen(false), []);
-
-  const value = useMemo(() => ({ seen, finish, replay }), [seen, finish, replay]);
+  // Ignore a result that belongs to a previously signed-in account.
+  const seen = uid && state?.uid === uid ? state.seen : null;
+  const value = useMemo(() => ({ seen, finish }), [seen, finish]);
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;
 }
 
