@@ -40,8 +40,7 @@ static uint8_t deniedCount[UPLOAD_QUEUE_SIZE];
 static size_t qHead = 0, qCount = 0;
 
 static PhCalibration calibration{false, PH7_MV, PH4_MV};
-static uint32_t nextCalibrationFetchMs = 0;
-static bool calibrationFetchedOnce = false;
+static uint32_t nextCalibrationFetchMs = 0;  // 0 = due now (first pass after boot)
 
 static uint32_t nextAttemptMs = 0;
 static uint32_t backoffMs = UPLOAD_BACKOFF_MIN_MS;
@@ -259,8 +258,9 @@ static bool fetchCalibration() {
   bool calibrated = f["status"]["stringValue"] == "calibrated";
   float ph7 = firestoreNumber(f["ph7Mv"]);
   float ph4 = firestoreNumber(f["ph4Mv"]);
-  // Same sanity rule as the app and firestore.rules: buffers at least 100 mV apart.
-  if (calibrated && (isnan(ph7) || isnan(ph4) || fabsf(ph7 - ph4) < 100)) {
+  // Same sanity rule as the app (domain/calibration.ts) and firestore.rules: buffers between
+  // 100 and 1500 mV apart, either direction (some pH modules invert their output).
+  if (calibrated && (isnan(ph7) || isnan(ph4) || fabsf(ph7 - ph4) < 100 || fabsf(ph7 - ph4) > 1500)) {
     Serial.println("[cloud] ignoring invalid pH calibration in device record");
     return true;
   }
@@ -307,15 +307,25 @@ size_t cloudPending() {
 
 void cloudLoop() {
   if (WiFi.status() != WL_CONNECTED || (int32_t)(millis() - nextAttemptMs) < 0) return;
-  bool calibrationDue = !calibrationFetchedOnce || (int32_t)(millis() - nextCalibrationFetchMs) >= 0;
+  // Due at start (nextCalibrationFetchMs = 0 counts as due), then every CALIBRATION_REFRESH_MS
+  // after a success or CALIBRATION_RETRY_MS after a failure - never on every loop, which would
+  // burn the project's daily Firestore read quota if the record cannot be read.
+  bool calibrationDue = nextCalibrationFetchMs == 0 || (int32_t)(millis() - nextCalibrationFetchMs) >= 0;
   if (!qCount && !calibrationDue) return;
   if (!ensureToken()) {
     backoff();
     return;
   }
   if (calibrationDue) {
-    if (fetchCalibration()) calibrationFetchedOnce = true;
-    nextCalibrationFetchMs = millis() + CALIBRATION_REFRESH_MS;
+    bool ok = fetchCalibration();
+    nextCalibrationFetchMs = millis() + (ok ? CALIBRATION_REFRESH_MS : CALIBRATION_RETRY_MS);
+    if (nextCalibrationFetchMs == 0) nextCalibrationFetchMs = 1;  // 0 means "due now"
+    // The read can drop an expired token; uploading without one would look like a rules
+    // rejection and could wrongly discard good readings. Sign in again on the next pass.
+    if (!idToken.length()) {
+      backoff();
+      return;
+    }
   }
   // A few per loop so a backlog drains without starving the sensor schedule.
   for (int sent = 0; sent < 5 && qCount; sent++) {

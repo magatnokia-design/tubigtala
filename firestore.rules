@@ -42,6 +42,24 @@ service cloud.firestore {
         && validProfile(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt;
 
+      // Last status per device and field, shared by all of the user's phones, so one ongoing
+      // condition raises one alert (domain/alerts.ts). Written in the same transaction as the alert.
+      match /alertState/{key} {
+        function validAlertState(s) {
+          return s.keys().hasOnly(['level', 'alertLevel', 'alertedAt', 'updatedAt'])
+            && s.keys().hasAll(['level', 'alertLevel', 'alertedAt', 'updatedAt'])
+            && s.level in ['normal', 'warning', 'critical']
+            && (s.alertLevel == null || s.alertLevel in ['warning', 'critical'])
+            && (s.alertedAt == null || s.alertedAt is timestamp)
+            && s.updatedAt == request.time;
+        }
+
+        allow read: if isOwner();
+        allow create, update: if isOwner()
+          && key.matches('^[A-Za-z0-9-]+_(ph|temperatureC|nh3GasMv)$')
+          && validAlertState(request.resource.data);
+      }
+
       // Alerts. Until Cloud Functions exist the app raises them itself while open, so the owner
       // may create one - only for their own device, in the fixed shape, unread, and with an ID
       // derived from the reading so two phones open at once cannot create duplicates.
@@ -87,8 +105,8 @@ service cloud.firestore {
       }
 
       // Two-point pH calibration saved by the app's calibration screen. "calibrated" needs both
-      // buffer voltages (module output, mV), at least 100 mV apart (otherwise the probe is not
-      // responding), stamped with the server time.
+      // buffer voltages (module output, mV), 100-1500 mV apart in either direction - the same rule
+      // as the app (domain/calibration.ts) and the firmware (cloud.cpp) - stamped with server time.
       function validCalibration(c) {
         return c is map
           && c.keys().hasOnly(['status', 'calibratedAt', 'method', 'ph7Mv', 'ph4Mv'])
@@ -99,6 +117,7 @@ service cloud.firestore {
                 && (c.ph7Mv is int || c.ph7Mv is float) && c.ph7Mv >= 0 && c.ph7Mv <= 5500
                 && (c.ph4Mv is int || c.ph4Mv is float) && c.ph4Mv >= 0 && c.ph4Mv <= 5500
                 && differs(c.ph7Mv, c.ph4Mv, 100)
+                && c.ph7Mv - c.ph4Mv <= 1500 && c.ph4Mv - c.ph7Mv <= 1500
                 && c.calibratedAt == request.time
                 && c.method is string && c.method.size() <= 80)
           );

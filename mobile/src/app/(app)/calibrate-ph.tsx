@@ -41,7 +41,10 @@ export default function CalibratePhScreen() {
   const { device } = useSelectedDevice();
   const history = useReadingsSince(device?.id ?? null, WINDOW_MS);
   const [step, setStep] = useState<Step>('ph7');
-  const [stepStartedAt, setStepStartedAt] = useState(() => Date.now());
+  // Server time of the newest reading when the step began; only later readings count, so the
+  // previous buffer cannot leak in. Both sides use the server clock, never the phone's.
+  // null until the first readings load.
+  const [stepAfter, setStepAfter] = useState<number | null>(null);
   const [ph7Mv, setPh7Mv] = useState<number | null>(null);
   const [ph4Mv, setPh4Mv] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,15 +52,16 @@ export default function CalibratePhScreen() {
   const readings = useMemo(() => (history.status === 'ready' ? history.data.readings : []), [history]);
   const latest = readings.length ? readings[readings.length - 1] : null;
   const live = latest && device ? deviceStatus(latest.serverTimeMs, device.readingIntervalSec, now) === 'live' : false;
-  // Only readings taken since this step began count, so the previous buffer cannot leak in.
-  const stepMvs = readings.filter((r) => r.serverTimeMs >= stepStartedAt).map((r) => r.phMv);
+  // First load: remember where step 1 starts (React's "adjust state while rendering" pattern).
+  if (stepAfter === null && history.status === 'ready') setStepAfter(latest?.serverTimeMs ?? 0);
+  const stepMvs = stepAfter === null ? [] : readings.filter((r) => r.serverTimeMs > stepAfter).map((r) => r.phMv);
   const s = stability(stepMvs);
   const cal = device?.phCalibration;
   const intervalText = device ? `${device.readingIntervalSec >= 60 ? `${Math.round(device.readingIntervalSec / 60)} min` : `${device.readingIntervalSec} s`}` : '';
 
   function goTo(next: Step) {
     setStep(next);
-    setStepStartedAt(Date.now());
+    setStepAfter(latest?.serverTimeMs ?? 0);
   }
 
   async function savePoint() {

@@ -20,7 +20,8 @@ import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
 import { insight, insightSentence } from '@/domain/insights';
 import { classify, METRIC_INFO, RANGES, type Metric } from '@/domain/thresholds';
 import type { Reading } from '@/domain/types';
-import { useReadingsBetween, useReadingsSince } from '@/hooks/use-devices';
+import { useReadingsBetween } from '@/hooks/use-devices';
+import { useNow } from '@/hooks/use-now';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
 import { HISTORY_LIMIT } from '@/services/devices';
@@ -33,6 +34,11 @@ const METRICS: { metric: Metric; icon: AndroidSymbol }[] = [
 ];
 
 const LIVE_WINDOW_MS = 3_600_000;
+// The live query restarts every 5 minutes so its window moves forward (and stays ~1 hour of
+// reads); between restarts the charts are trimmed to exactly the last hour.
+const LIVE_STEP_MS = 5 * 60_000;
+// Latest instant Firestore timestamps allow; "no upper limit" for the live query.
+const FAR_FUTURE_MS = 253402300799000;
 
 type Mode = 'live' | 'date';
 
@@ -45,11 +51,16 @@ export default function AnalyticsScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const deviceId = device?.id ?? null;
-  const live = useReadingsSince(mode === 'live' ? deviceId : null, LIVE_WINDOW_MS);
+  const now = useNow(30_000);
+  const liveStart = Math.floor(now / LIVE_STEP_MS) * LIVE_STEP_MS - LIVE_WINDOW_MS;
+  const live = useReadingsBetween(mode === 'live' ? deviceId : null, liveStart, FAR_FUTURE_MS);
   const dated = useReadingsBetween(mode === 'date' ? deviceId : null, range.start, endOfDay(range.end));
   const history = mode === 'live' ? live : dated;
 
-  const readings = device && history.status === 'ready' ? history.data.readings : [];
+  const readings = useMemo(() => {
+    const loaded = device && history.status === 'ready' ? history.data.readings : [];
+    return mode === 'live' ? loaded.filter((r) => r.serverTimeMs >= now - LIVE_WINDOW_MS) : loaded;
+  }, [device, history, mode, now]);
   const loading = devices.status === 'loading' || (device !== null && history.status === 'loading');
   const loadError = devices.status === 'error' ? devices.message : device && history.status === 'error' ? history.message : null;
   const multiDay = mode === 'date' && range.end !== range.start;

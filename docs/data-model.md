@@ -8,7 +8,8 @@ Status: **draft, 24 Oct 2026.** No real hardware has produced a reading yet; eve
 
 ```
 users/{uid}                                  one app account's profile and alert preferences
-users/{uid}/notifications/{notificationId}   alerts for that account (written by the backend)
+users/{uid}/notifications/{notificationId}   alerts for that account
+users/{uid}/alertState/{deviceId}_{metric}   last status per device and field (alert de-duplication)
 devices/{deviceId}                           one monitoring unit (ESP32 + probes)
 devices/{deviceId}/readings/{readingId}      one sample from that unit
 ```
@@ -32,9 +33,22 @@ Only the owner can read or write it; it cannot be deleted from the app. Email li
 
 ### `users/{uid}/notifications/{notificationId}`
 
-Alerts. Until Cloud Functions exist, the app raises them itself **while it is open** (`mobile/src/components/alert-watcher.tsx`): when a reading's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`), it creates one. Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
+Alerts. Until Cloud Functions exist, the app raises them itself **while it is open** (`mobile/src/services/alerts.ts`, decision in `mobile/src/domain/alerts.ts`): one alert when a field's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`). Within 30 minutes of an alert, the same or a lower level does not alert again (a value bouncing across a limit); a worse level always does. Uncalibrated pH alerts say "(uncalibrated)". Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
 
-The document ID is `{deviceId}_{metric}_{readingId}`, enforced by the rules, so two phones open at once cannot both raise the same alert. The owner may create alerts only for devices they own, mark them read, and delete them.
+The document ID is `{deviceId}_{metric}_{readingId}`, enforced by the rules. The owner may create alerts only for devices they own, mark them read, and delete them.
+
+### `users/{uid}/alertState/{deviceId}_{metric}`
+
+Shared by all of the user's phones, so one ongoing condition raises one alert even with two phones or after a reinstall. Written in the same Firestore transaction as the alert: if the alert fails, the state is unchanged and the next reading tries again.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `level` | `normal` | `warning` | `critical` | Last status seen. |
+| `alertLevel` | `warning` | `critical` | null | Level of the last alert raised. |
+| `alertedAt` | timestamp | null | When that alert was raised (cooldown). |
+| `updatedAt` | timestamp | Server time of the write. |
+
+Owner only. Each phone touches this record only when a field's status changes, not on every reading, to keep Firestore reads low. Verified on the emulator (28 Oct 2026): two phones racing on the same reading produce one alert; the loser gets `permission-denied` and does nothing on its next try.
 
 ### Alert ranges (placeholder)
 

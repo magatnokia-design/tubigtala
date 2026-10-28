@@ -32,7 +32,7 @@ export async function exportToExcel(uid: string, device: Device, range: DayRange
     simulated: device.simulated,
     range,
     metrics,
-    readings: readings.map((r) => ({ t: r.serverTimeMs, ph: r.ph, temperatureC: r.temperatureC, nh3GasMv: r.nh3GasMv })),
+    readings: readings.map((r) => ({ t: r.serverTimeMs, ph: r.ph, phCalibrated: r.phCalibrated, temperatureC: r.temperatureC, nh3GasMv: r.nh3GasMv })),
     alerts: alerts.map((a) => ({ t: a.createdAtMs, metric: a.metric, title: a.title, body: a.body, value: a.value, level: a.level })),
     generatedAt: Date.now(),
     truncated,

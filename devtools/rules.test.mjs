@@ -74,6 +74,8 @@ test('owner can reset to uncalibrated', () =>
   assertSucceeds(setCal('owner', { status: 'uncalibrated', calibratedAt: null, method: null })));
 test('stranger cannot calibrate', () => assertFails(setCal('stranger', calibration())));
 test('device itself cannot calibrate', () => assertFails(setCal('board', calibration())));
+test('buffers more than 1500 mV apart are rejected', () => assertFails(setCal('owner', calibration({ ph7Mv: 1000, ph4Mv: 2600 }))));
+test('calibration in the inverted direction is allowed', () => assertSucceeds(setCal('owner', calibration({ ph7Mv: 3045, ph4Mv: 2510 }))));
 test('buffers closer than 100 mV are rejected (probe not responding)', () =>
   assertFails(setCal('owner', calibration({ ph7Mv: 2510, ph4Mv: 2560 }))));
 test('calibration needs both buffer voltages', () => {
@@ -195,4 +197,25 @@ test('owner can read, mark read and delete own notifications; others cannot', as
   await assertFails(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { title: 'edited' }));
   await assertFails(deleteDoc(doc(as('maria'), 'users/juan/notifications/n1')));
   await assertSucceeds(deleteDoc(doc(as('juan'), 'users/juan/notifications/n1')));
+});
+
+// --- users/{uid}/alertState ---
+const stateDoc = (uid, key = `${DEVICE}_ph`) => `users/${uid}/alertState/${key}`;
+const alertState = (o = {}) => ({ level: 'critical', alertLevel: 'critical', alertedAt: serverTimestamp(), updatedAt: serverTimestamp(), ...o });
+
+test('owner can write and read own alert state', async () => {
+  await assertSucceeds(setDoc(doc(as('owner'), stateDoc('owner')), alertState()));
+  await assertSucceeds(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'normal' })));
+  await assertSucceeds(getDoc(doc(as('owner'), stateDoc('owner'))));
+});
+test('others cannot read or write the owner alert state', async () => {
+  await assertFails(setDoc(doc(as('stranger'), stateDoc('owner')), alertState()));
+  await assertFails(getDoc(doc(as('stranger'), stateDoc('owner'))));
+});
+test('alert state must be well-formed', async () => {
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'unknown' })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ alertLevel: 'normal' })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ updatedAt: Timestamp.fromMillis(0) })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ extra: true })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner', `${DEVICE}_salinity`)), alertState()));
 });

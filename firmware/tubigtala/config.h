@@ -52,3 +52,5 @@
 #define MAX_REJECTED_TRIES 5
 // How often to check the device record for a new pH calibration saved in the app.
 #define CALIBRATION_REFRESH_MS 600000UL
+// After a failed read of the device record (not provisioned yet, offline...), try again after:
+#define CALIBRATION_RETRY_MS 60000UL

@@ -13,8 +13,8 @@ const input = (overrides: Partial<ExportInput> = {}): ExportInput => ({
   range: { start: day(21), end: day(27) },
   metrics: ['ph', 'nh3GasMv'],
   readings: [
-    { t: day(21) + 3_600_000, ph: 7.1, temperatureC: 27, nh3GasMv: 420 },
-    { t: day(22) + 3_600_000, ph: 9.4, temperatureC: null, nh3GasMv: null },
+    { t: day(21) + 3_600_000, ph: 7.1, phCalibrated: false, temperatureC: 27, nh3GasMv: 420 },
+    { t: day(22) + 3_600_000, ph: 9.4, phCalibrated: true, temperatureC: null, nh3GasMv: null },
   ],
   alerts: [{ t: day(22) + 3_600_000, metric: 'ph', title: 'pH too basic', body: 'Tank 1: 9.4', value: 9.4, level: 'critical' }],
   generatedAt: day(27) + 8 * 3_600_000,
@@ -43,14 +43,22 @@ test('workbook has the required parts and only the chosen fields', () => {
   assert.ok(readings.includes('Ammonia (mV)'));
   assert.ok(!readings.includes('Temperature'), 'temperature was not selected');
   assert.ok(readings.includes('Too basic'));
+  assert.ok(readings.includes('pH calibrated'), 'calibration flag column');
   assert.ok(readings.includes('No reading'), 'missing value is labelled, not zero');
   assert.ok(readings.includes('state="frozen"'));
   assert.ok(readings.includes('showGridLines="0"'), 'gridlines hidden');
   assert.ok(readings.includes('zeroHeight="1"'), 'unused rows hidden');
-  assert.ok(/<col min="6" max="16384"[^>]*hidden="1"/.test(readings), 'unused columns hidden');
+  assert.ok(/<col min="7" max="16384"[^>]*hidden="1"/.test(readings), 'unused columns hidden');
   assert.ok(strFromU8(zip['xl/worksheets/sheet1.xml']).includes('<mergeCell ref="A1:F1"/>'), 'title banner merged');
   assert.ok(strFromU8(zip['xl/styles.xml']).includes('FF0079CE'), 'brand blue header');
   assert.ok(strFromU8(zip['xl/workbook.xml']).includes('name="Alerts"'));
+});
+
+test('calibration notes reflect the readings', () => {
+  const mixed = JSON.stringify(exportSheets(input())[0].rows);
+  assert.ok(mixed.includes('1 of 2 readings are from an uncalibrated probe'));
+  const allCal = exportSheets(input({ readings: [{ t: day(21), ph: 7, phCalibrated: true, temperatureC: 25, nh3GasMv: 400 }] }));
+  assert.ok(!JSON.stringify(allCal[0].rows).includes('uncalibrated probe'), 'no warning when all calibrated');
 });
 
 test('summary notes are honest', () => {

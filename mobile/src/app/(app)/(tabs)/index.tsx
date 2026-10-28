@@ -15,7 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { formatAge, formatNumber } from '@/domain/format';
 import { deviceStatus } from '@/domain/status';
-import { classify, RANGES } from '@/domain/thresholds';
+import { classify, normalRangeText, RANGES } from '@/domain/thresholds';
 import { useLatestReading } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
 import { useNotifications } from '@/hooks/use-profile';
@@ -80,14 +80,14 @@ export default function WaterScreen() {
           label="pH level"
           value={formatNumber(reading?.ph ?? null, 1)}
           status={ph}
-          note={`Normal ${RANGES.ph.normal[0]} – ${RANGES.ph.normal[1]}`}
+          note={`Normal ${normalRangeText('ph')}`}
           dimmed={dimmed}
           tags={[...(reading && !reading.phCalibrated ? [{ label: 'Uncalibrated', tone: 'warning' as const }] : []), ...sim]}>
           <ScaleBar
             value={reading?.ph ?? null}
             min={0}
             max={14}
-            segments={[{ until: 6.5, color: theme.scaleAcid }, { until: 8.5, color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
+            segments={[{ until: RANGES.ph.normal[0], color: theme.scaleAcid }, { until: RANGES.ph.normal[1], color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
             labels={['0 Acidic', '7 Neutral', 'Basic 14']}
           />
         </MetricCard>
@@ -98,7 +98,7 @@ export default function WaterScreen() {
           value={formatNumber(reading?.temperatureC ?? null, 1)}
           unit="°C"
           status={temp}
-          note={`Normal ${RANGES.temperatureC.normal[0]} – ${RANGES.temperatureC.normal[1]} °C`}
+          note={`Normal ${normalRangeText('temperatureC')}`}
           dimmed={dimmed}
           tags={sim}>
           <ScaleBar
@@ -116,7 +116,7 @@ export default function WaterScreen() {
           value={formatNumber(reading?.nh3GasMv ?? null, 0)}
           unit="mV"
           status={nh3}
-          note={`Gas above the water · normal up to ${RANGES.nh3GasMv.normal[1]} mV`}
+          note={`Gas above the water · normal ${normalRangeText('nh3GasMv')}`}
           dimmed={dimmed}
           tags={[{ label: 'Relative, not ppm', tone: 'info' }, ...sim]}
         />

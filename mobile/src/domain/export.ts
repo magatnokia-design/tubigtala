@@ -11,6 +11,8 @@ export const EXPORT_METRICS: Metric[] = ['ph', 'temperatureC', 'nh3GasMv'];
 export interface ExportReading {
   t: number;
   ph: number | null;
+  /** false = pH computed from the firmware's nominal constants, not a buffer calibration */
+  phCalibrated: boolean;
   temperatureC: number | null;
   nh3GasMv: number | null;
 }
@@ -48,7 +50,13 @@ export function exportSheets(input: ExportInput): Sheet[] {
 
   const notes: string[] = [];
   if (input.simulated) notes.push('Simulated device: values were generated for testing, not measured.');
-  if (metrics.includes('ph')) notes.push('pH: indicative until the probe is calibrated.');
+  const phReadings = input.readings.filter((r) => r.ph !== null);
+  const uncalibrated = phReadings.filter((r) => !r.phCalibrated).length;
+  if (metrics.includes('ph') && uncalibrated > 0) {
+    notes.push(uncalibrated === phReadings.length
+      ? 'pH: all readings are from an uncalibrated probe - indicative only.'
+      : `pH: ${uncalibrated} of ${phReadings.length} readings are from an uncalibrated probe (see "pH calibrated"); the Summary pH figures mix both.`);
+  }
   if (metrics.includes('nh3GasMv')) notes.push('Ammonia: gas in the air above the water, uncalibrated relative mV (not ppm).');
   if (input.truncated) notes.push('Only the most recent readings in this range were included (read limit reached).');
 
@@ -96,12 +104,14 @@ export function exportSheets(input: ExportInput): Sheet[] {
     name: 'Readings',
     headerRow: 1,
     rows: [
-      ['Date and time', ...metrics.flatMap((m) => [columnLabel(m), `${METRIC_INFO[m].name} status`])].map((h) => ({ v: h, s: 'header' as const })),
+      ['Date and time', ...metrics.flatMap((m) => [columnLabel(m), `${METRIC_INFO[m].name} status`, ...(m === 'ph' ? ['pH calibrated'] : [])])].map((h) => ({ v: h, s: 'header' as const })),
       ...input.readings.map((r, i): Cell[] => [
         band(i, isoLocal(r.t)),
         ...metrics.flatMap((m): Cell[] => {
           const st = classify(m, r[m]);
-          return [band(i, r[m]), { v: r[m] === null ? 'No reading' : st.label, s: statusStyle(st.level) }];
+          const cells: Cell[] = [band(i, r[m]), { v: r[m] === null ? 'No reading' : st.label, s: statusStyle(st.level) }];
+          if (m === 'ph') cells.push(band(i, r.ph === null ? '' : r.phCalibrated ? 'Yes' : 'No'));
+          return cells;
         }),
       ]),
     ],
