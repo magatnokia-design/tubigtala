@@ -49,6 +49,8 @@ cd mobile; npm start
 
 Scan the QR code with Expo Go. The app finds the emulators on the PC's IP automatically (from the Metro bundler address). Override with `EXPO_PUBLIC_EMULATOR_HOST` in `mobile\.env` if needed.
 
+**What the app shows, in order:** sign in / create account -> "One more step" (any account without a PH mobile number, e.g. a new Google account) -> four onboarding slides (once per account per phone) -> Android notification prompt (once) -> the three tabs: Analytics, Water (start tab), Settings. Onboarding and the prompt are remembered on the phone (AsyncStorage, per account); clearing app data shows them again. Water and Analytics always show their cards, with "—" when there is no device or data.
+
 **Google sign-in on the emulator:** "Continue with Google" signs in as a test account (`demo.google@tubigtala.test`) that the Auth emulator creates. It starts with no devices; give it the simulated device with `cd devtools; npm run assign -- demo.google@tubigtala.test` (and back with `demo@tubigtala.test`). Real Google accounts only work in an APK with a native Google sign-in library, which is not added yet.
 
 ## APK builds (GitHub Actions)
@@ -65,6 +67,10 @@ It needs, in the GitHub repo settings (Secrets and variables > Actions):
 The APK always uses the **real** project: an installed app cannot reach the emulators on this PC. The workflow refuses to build if the variables are missing or the project ID is not `tubigtala-64d9e`.
 
 **Keystore:** `C:\App\tubigtala-keystore\debug.keystore` (outside the repo; never Dagitab's `C:\App\wattwise-keystore`). Android debug credentials (alias `androiddebugkey`, password `android`), fine for a sideloaded prototype, not for the Play Store. Back it up: if it is lost, new APKs will not install over old ones and the SHA-1 registered for Google sign-in changes. SHA-1 `69:2C:E1:DB:35:06:D4:D1:00:AB:EE:34:6A:87:EB:F2:0D:41:90:08`.
+
+**See an alert:** with the app open on the Water tab, stop the simulator (Ctrl+C) and run `npm run simulate -- --alert=ph` (or `temp`, `nh3`). The first 12 readings (~2 min) are critical: the card turns red, the bell count goes up, and in the installed APK a phone notification appears. Then values return to normal.
+
+**Expo Go limits:** Expo Go on Android (SDK 58) cannot load `expo-notifications`, so the permission prompt and phone notifications only work in the APK; in Expo Go the switch says "Works in the installed app". Google sign-in with real accounts also needs the APK.
 
 ## Tests
 

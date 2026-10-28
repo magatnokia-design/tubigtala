@@ -1,44 +1,12 @@
-// Live Firestore subscriptions as explicit load states, so screens can tell
-// "no data" apart from "still loading", "permission denied" and "failed".
-import { useCallback, useEffect, useState } from 'react';
-import type { FirestoreError, Unsubscribe } from 'firebase/firestore';
+import { useCallback } from 'react';
 
 import type { Device, Reading } from '@/domain/types';
 import { useAuth } from '@/hooks/use-auth';
-import { subscribeLatestReading, subscribeOwnedDevices, subscribeReadingsSince } from '@/services/devices';
+import { useCached } from '@/hooks/use-cached';
+import { useSubscription, type LoadState, type Subscribe } from '@/hooks/use-subscription';
+import { subscribeLatestReading, subscribeOwnedDevices, subscribeReadingsBetween, subscribeReadingsSince } from '@/services/devices';
 
-export type LoadState<T> =
-  | { status: 'loading' }
-  | { status: 'ready'; data: T }
-  | { status: 'error'; reason: 'permission-denied' | 'unavailable' | 'other'; message: string };
-
-function toError(e: FirestoreError): LoadState<never> {
-  if (e.code === 'permission-denied') {
-    return { status: 'error', reason: 'permission-denied', message: 'You do not have access to this data.' };
-  }
-  if (e.code === 'unavailable') {
-    return { status: 'error', reason: 'unavailable', message: 'Cannot reach the database. Check your connection.' };
-  }
-  return { status: 'error', reason: 'other', message: `Could not load data (${e.code}).` };
-}
-
-type Subscribe<T> = (onData: (data: T) => void, onError: (e: FirestoreError) => void) => Unsubscribe;
-
-/**
- * Results are tagged with the subscription `key`, so after the key changes (another device,
- * another time range) the hook reports loading instead of the previous key's data.
- */
-function useSubscription<T>(key: string | null, subscribe: Subscribe<T>): LoadState<T> {
-  const [result, setResult] = useState<{ key: string; state: LoadState<T> } | null>(null);
-  useEffect(() => {
-    if (key === null) return;
-    return subscribe(
-      (data) => setResult({ key, state: { status: 'ready', data } }),
-      (e) => setResult({ key, state: toError(e) }),
-    );
-  }, [key, subscribe]);
-  return result !== null && result.key === key ? result.state : { status: 'loading' };
-}
+export type { LoadState };
 
 export function useOwnedDevices(): LoadState<Device[]> {
   const uid = useAuth().user?.uid ?? null;
@@ -46,21 +14,30 @@ export function useOwnedDevices(): LoadState<Device[]> {
     (onData, onError) => subscribeOwnedDevices(uid ?? '', onData, onError),
     [uid],
   );
-  return useSubscription(uid, subscribe);
+  return useCached(uid && `devices.${uid}`, useSubscription(uid, subscribe));
 }
 
-export function useLatestReading(deviceId: string): LoadState<Reading | null> {
+export function useLatestReading(deviceId: string | null): LoadState<Reading | null> {
   const subscribe = useCallback<Subscribe<Reading | null>>(
-    (onData, onError) => subscribeLatestReading(deviceId, onData, onError),
+    (onData, onError) => subscribeLatestReading(deviceId ?? '', onData, onError),
     [deviceId],
   );
-  return useSubscription(deviceId, subscribe);
+  return useCached(deviceId && `latest.${deviceId}`, useSubscription(deviceId, subscribe));
 }
 
-export function useReadingsSince(deviceId: string, windowMs: number): LoadState<Reading[]> {
-  const subscribe = useCallback<Subscribe<Reading[]>>(
-    (onData, onError) => subscribeReadingsSince(deviceId, Date.now() - windowMs, onData, onError),
+export function useReadingsSince(deviceId: string | null, windowMs: number): LoadState<{ readings: Reading[]; truncated: boolean }> {
+  const subscribe = useCallback<Subscribe<{ readings: Reading[]; truncated: boolean }>>(
+    (onData, onError) => subscribeReadingsSince(deviceId ?? '', Date.now() - windowMs, onData, onError),
     [deviceId, windowMs],
   );
-  return useSubscription(`${deviceId}|${windowMs}`, subscribe);
+  return useSubscription(deviceId === null ? null : `${deviceId}|${windowMs}`, subscribe);
+}
+
+/** Readings between two times, live. */
+export function useReadingsBetween(deviceId: string | null, startMs: number, endMs: number): LoadState<{ readings: Reading[]; truncated: boolean }> {
+  const subscribe = useCallback<Subscribe<{ readings: Reading[]; truncated: boolean }>>(
+    (onData, onError) => subscribeReadingsBetween(deviceId ?? '', startMs, endMs, onData, onError),
+    [deviceId, startMs, endMs],
+  );
+  return useSubscription(deviceId === null ? null : `${deviceId}|${startMs}|${endMs}`, subscribe);
 }

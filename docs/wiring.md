@@ -1,5 +1,7 @@
 # Wiring and calibration plan
 
+After wiring and calibration, provision and flash the board with `docs/device-setup.md`.
+
 Status: **planned, unverified (24 Oct 2026).** No hardware is in hand yet. Every pin, voltage and value below is a plan to check against the actual modules when they arrive. Update this file with what was measured, and mark each item verified.
 
 ## Board
@@ -32,16 +34,15 @@ pH and MQ-137 boards powered at 5 V can output up to ~5 V. Before wiring to the 
 
 ## Calibration
 
-### pH (two-point, pH 7 and pH 4 buffers)
+### pH (two-point, pH 7 and pH 4 buffers) - done in the app, no re-flashing
 
 1. Let the probe and buffers reach room temperature. Rinse the probe with distilled water between buffers.
-2. Put the probe in pH 7.00 buffer. Wait for the reading to settle (~1–2 min). Record `phMv` from serial output → `PH7_MV`.
-3. Rinse, put in pH 4.00 buffer, wait, record → `PH4_MV`.
-4. Put both in `config.h`, set `PH_CALIBRATED true`, re-flash.
-5. Check: back in pH 7 buffer, the reported `ph` should be within ±0.1.
-6. Record date and method in the device document's `phCalibration` field.
+2. App: **Settings > Device > Calibrate pH**. Put the probe in pH 7.00 buffer and wait for **Stable** (3 readings within 5 mV - about 3 minutes at one reading a minute), then **Save pH 7 point**.
+3. Rinse, pH 4.00 buffer, wait for Stable, **Save pH 4 point**, review, **Save calibration**.
+4. The board picks it up within 10 minutes (serial: `[cloud] pH calibration applied`) and keeps it in flash.
+5. Check: back in pH 7 buffer, the reported pH should be within ±0.1 of 7.
 
-Until this is done, readings carry `phCalibrated: false` and the app labels pH as uncalibrated.
+Until then, readings use the nominal `PH7_MV`/`PH4_MV` in `config.h`, carry `phCalibrated: false`, and the app labels pH as uncalibrated.
 
 ### DS18B20
 

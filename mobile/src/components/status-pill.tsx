@@ -14,14 +14,15 @@ const LABEL: Record<DeviceStatus, string> = {
 
 const COLOR = { 'no-data': 'noData', live: 'live', stale: 'stale', offline: 'offline' } as const;
 
-export function StatusPill({ status }: { status: DeviceStatus }) {
+/** `label` overrides the default text, e.g. "No device" when nothing is linked. */
+export function StatusPill({ status, label }: { status: DeviceStatus; label?: string }) {
   const theme = useTheme();
   const color = theme[COLOR[status]];
   return (
     <View style={[styles.pill, { borderColor: color }]}>
       <View style={[styles.dot, { backgroundColor: color }]} />
       <ThemedText type="smallBold" style={{ color }}>
-        {LABEL[status]}
+        {label ?? LABEL[status]}
       </ThemedText>
     </View>
   );

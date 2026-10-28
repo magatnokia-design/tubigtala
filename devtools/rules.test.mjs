@@ -58,6 +58,38 @@ test('nobody can create devices from a client', () =>
   assertFails(setDoc(doc(as('owner'), 'devices/new'), { name: 'x', ownerUid: 'owner', deviceUid: 'b', simulated: false })));
 test('owner cannot delete device', () => assertFails(deleteDoc(doc(as('owner'), `devices/${DEVICE}`))));
 
+// --- device reads its own record (pH calibration) ---
+test('device can read its own record', () => assertSucceeds(getDoc(doc(as('board'), `devices/${DEVICE}`))));
+test('device cannot read another device', () => assertFails(getDoc(doc(as('board'), 'devices/other'))));
+
+// --- pH calibration ---
+const calibration = (overrides = {}) => ({
+  status: 'calibrated', calibratedAt: serverTimestamp(), method: 'Two-point, pH 7 and pH 4 buffers (app)',
+  ph7Mv: 2510, ph4Mv: 3045, ...overrides,
+});
+const setCal = (uid, c) => updateDoc(doc(as(uid), `devices/${DEVICE}`), { phCalibration: c });
+
+test('owner can save a valid calibration', () => assertSucceeds(setCal('owner', calibration())));
+test('owner can reset to uncalibrated', () =>
+  assertSucceeds(setCal('owner', { status: 'uncalibrated', calibratedAt: null, method: null })));
+test('stranger cannot calibrate', () => assertFails(setCal('stranger', calibration())));
+test('device itself cannot calibrate', () => assertFails(setCal('board', calibration())));
+test('buffers more than 1500 mV apart are rejected', () => assertFails(setCal('owner', calibration({ ph7Mv: 1000, ph4Mv: 2600 }))));
+test('calibration in the inverted direction is allowed', () => assertSucceeds(setCal('owner', calibration({ ph7Mv: 3045, ph4Mv: 2510 }))));
+test('buffers closer than 100 mV are rejected (probe not responding)', () =>
+  assertFails(setCal('owner', calibration({ ph7Mv: 2510, ph4Mv: 2560 }))));
+test('calibration needs both buffer voltages', () => {
+  const c = calibration();
+  delete c.ph4Mv;
+  return assertFails(setCal('owner', c));
+});
+test('calibration voltage out of range is rejected', () => assertFails(setCal('owner', calibration({ ph4Mv: 9000 }))));
+test('client-chosen calibration time is rejected', () =>
+  assertFails(setCal('owner', calibration({ calibratedAt: Timestamp.fromMillis(0) }))));
+test('extra calibration field is rejected', () => assertFails(setCal('owner', calibration({ slope: 3 }))));
+test('owner still cannot change other device fields with a calibration', () =>
+  assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { phCalibration: calibration(), deviceUid: 'owner' })));
+
 // --- readings: read ---
 test('owner can read readings', () => assertSucceeds(getDoc(doc(as('owner'), path('seed-0')))));
 test('stranger cannot read readings', () => assertFails(getDoc(doc(as('stranger'), path('seed-0')))));
@@ -91,3 +123,99 @@ test('re-sending the same reading is rejected (dedupe)', async () => {
   await assertFails(setDoc(doc(db, path('abcd1234-0')), reading()));
 });
 test('readings cannot be deleted', () => assertFails(deleteDoc(doc(as('owner'), path('seed-0')))));
+
+// --- users/{uid} profiles ---
+function profile(overrides = {}) {
+  return {
+    displayName: 'Juan', phoneE164: '+639000000001', smsAlertsEnabled: false, pushEnabled: false,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...overrides,
+  };
+}
+const userPath = (uid) => `users/${uid}`;
+
+test('user can create own profile', () => assertSucceeds(setDoc(doc(as('juan'), userPath('juan')), profile())));
+test('user cannot create someone else\'s profile', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('maria')), profile())));
+test('signed-out cannot create a profile', () => assertFails(setDoc(doc(as(null), userPath('juan')), profile())));
+test('profile without phone is allowed (Google sign-up step)', () =>
+  assertSucceeds(setDoc(doc(as('juan'), userPath('juan')), profile({ phoneE164: null }))));
+for (const bad of ['09001234567', '+639001234', '+63900123456789', '+638171234567', '+1 900 123 4567']) {
+  test(`phone ${bad} is rejected`, () => assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ phoneE164: bad }))));
+}
+test('SMS alerts need a phone number', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ phoneE164: null, smsAlertsEnabled: true }))));
+test('blank name is rejected', () => assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ displayName: '  ' }))));
+test('extra profile field is rejected', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ isAdmin: true }))));
+test('client-chosen createdAt is rejected', () =>
+  assertFails(setDoc(doc(as('juan'), userPath('juan')), profile({ createdAt: Timestamp.fromMillis(0) }))));
+
+test('owner can read and update own profile, others cannot read it', async () => {
+  await assertSucceeds(setDoc(doc(as('juan'), userPath('juan')), profile()));
+  await assertSucceeds(getDoc(doc(as('juan'), userPath('juan'))));
+  await assertFails(getDoc(doc(as('maria'), userPath('juan'))));
+  await assertSucceeds(updateDoc(doc(as('juan'), userPath('juan')), { smsAlertsEnabled: true, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(as('juan'), userPath('juan')), { createdAt: Timestamp.fromMillis(0), updatedAt: serverTimestamp() }));
+  await assertFails(deleteDoc(doc(as('juan'), userPath('juan'))));
+});
+
+// --- users/{uid}/notifications ---
+// 'owner' owns devices/dev-1 (see beforeEach); 'stranger' owns nothing.
+function alert(overrides = {}) {
+  return {
+    title: 'pH too basic', body: 'Tank: 9.4 (normal 6.5 – 8.5)', deviceId: DEVICE, metric: 'ph', value: 9.4,
+    level: 'critical', readingId: 'abcd1234-5', createdAt: serverTimestamp(), read: false, ...overrides,
+  };
+}
+const alertPath = (uid, a = alert()) => `users/${uid}/notifications/${a.deviceId}_${a.metric}_${a.readingId}`;
+
+test('owner can raise a valid alert for their own device', () =>
+  assertSucceeds(setDoc(doc(as('owner'), alertPath('owner')), alert())));
+test('the same alert cannot be raised twice (dedupe)', async () => {
+  await assertSucceeds(setDoc(doc(as('owner'), alertPath('owner')), alert()));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert()));
+});
+test('cannot raise an alert for someone else\'s device', () =>
+  assertFails(setDoc(doc(as('stranger'), alertPath('stranger')), alert())));
+test('cannot raise an alert in another user\'s inbox', () =>
+  assertFails(setDoc(doc(as('stranger'), alertPath('owner')), alert())));
+test('alert ID must match device, metric and reading', () =>
+  assertFails(setDoc(doc(as('owner'), `users/owner/notifications/${DEVICE}_ph_other`), alert())));
+test('alert must start unread with server time and a known level', async () => {
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ read: true })));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ createdAt: Timestamp.fromMillis(0) })));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ level: 'normal' })));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ extra: 1 })));
+});
+
+test('owner can read, mark read and delete own notifications; others cannot', async () => {
+  await env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), 'users/juan/notifications/n1'), { title: 'pH high', body: 'x', read: false, createdAt: Timestamp.now() }));
+  await assertSucceeds(getDoc(doc(as('juan'), 'users/juan/notifications/n1')));
+  await assertFails(getDoc(doc(as('maria'), 'users/juan/notifications/n1')));
+  await assertSucceeds(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { read: true }));
+  await assertFails(updateDoc(doc(as('juan'), 'users/juan/notifications/n1'), { title: 'edited' }));
+  await assertFails(deleteDoc(doc(as('maria'), 'users/juan/notifications/n1')));
+  await assertSucceeds(deleteDoc(doc(as('juan'), 'users/juan/notifications/n1')));
+});
+
+// --- users/{uid}/alertState ---
+const stateDoc = (uid, key = `${DEVICE}_ph`) => `users/${uid}/alertState/${key}`;
+const alertState = (o = {}) => ({ level: 'critical', alertLevel: 'critical', alertedAt: serverTimestamp(), updatedAt: serverTimestamp(), ...o });
+
+test('owner can write and read own alert state', async () => {
+  await assertSucceeds(setDoc(doc(as('owner'), stateDoc('owner')), alertState()));
+  await assertSucceeds(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'normal' })));
+  await assertSucceeds(getDoc(doc(as('owner'), stateDoc('owner'))));
+});
+test('others cannot read or write the owner alert state', async () => {
+  await assertFails(setDoc(doc(as('stranger'), stateDoc('owner')), alertState()));
+  await assertFails(getDoc(doc(as('stranger'), stateDoc('owner'))));
+});
+test('alert state must be well-formed', async () => {
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'unknown' })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ alertLevel: 'normal' })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ updatedAt: Timestamp.fromMillis(0) })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ extra: true })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner', `${DEVICE}_salinity`)), alertState()));
+});
