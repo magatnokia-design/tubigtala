@@ -73,15 +73,45 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
-      allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      // The owner reads it in the app; the board reads its own record to pick up its pH
+      // calibration (docs/device-setup.md).
+      allow read: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid || resource.data.deviceUid == request.auth.uid);
 
-      // Devices are provisioned with devtools (admin). The owner may only rename.
+      function validName(n) {
+        return n is string && n.trim().size() >= 1 && n.size() <= 40;
+      }
+
+      function differs(a, b, by) {
+        return a - b >= by || b - a >= by;
+      }
+
+      // Two-point pH calibration saved by the app's calibration screen. "calibrated" needs both
+      // buffer voltages (module output, mV), at least 100 mV apart (otherwise the probe is not
+      // responding), stamped with the server time.
+      function validCalibration(c) {
+        return c is map
+          && c.keys().hasOnly(['status', 'calibratedAt', 'method', 'ph7Mv', 'ph4Mv'])
+          && (
+            (c.status == 'uncalibrated' && c.calibratedAt == null)
+            || (c.status == 'calibrated'
+                && c.keys().hasAll(['ph7Mv', 'ph4Mv'])
+                && (c.ph7Mv is int || c.ph7Mv is float) && c.ph7Mv >= 0 && c.ph7Mv <= 5500
+                && (c.ph4Mv is int || c.ph4Mv is float) && c.ph4Mv >= 0 && c.ph4Mv <= 5500
+                && differs(c.ph7Mv, c.ph4Mv, 100)
+                && c.calibratedAt == request.time
+                && c.method is string && c.method.size() <= 80)
+          );
+      }
+
+      // Devices are provisioned by an admin (Firebase console). The owner may rename the device
+      // and save or reset its pH calibration - nothing else.
       allow update: if signedIn()
         && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
-        && request.resource.data.name is string
-        && request.resource.data.name.trim().size() >= 1
-        && request.resource.data.name.size() <= 40;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phCalibration'])
+        && validName(request.resource.data.name)
+        && (!('phCalibration' in request.resource.data.diff(resource.data).affectedKeys())
+            || validCalibration(request.resource.data.phCalibration));
 
       match /readings/{readingId} {
         function device() {

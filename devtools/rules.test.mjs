@@ -58,6 +58,36 @@ test('nobody can create devices from a client', () =>
   assertFails(setDoc(doc(as('owner'), 'devices/new'), { name: 'x', ownerUid: 'owner', deviceUid: 'b', simulated: false })));
 test('owner cannot delete device', () => assertFails(deleteDoc(doc(as('owner'), `devices/${DEVICE}`))));
 
+// --- device reads its own record (pH calibration) ---
+test('device can read its own record', () => assertSucceeds(getDoc(doc(as('board'), `devices/${DEVICE}`))));
+test('device cannot read another device', () => assertFails(getDoc(doc(as('board'), 'devices/other'))));
+
+// --- pH calibration ---
+const calibration = (overrides = {}) => ({
+  status: 'calibrated', calibratedAt: serverTimestamp(), method: 'Two-point, pH 7 and pH 4 buffers (app)',
+  ph7Mv: 2510, ph4Mv: 3045, ...overrides,
+});
+const setCal = (uid, c) => updateDoc(doc(as(uid), `devices/${DEVICE}`), { phCalibration: c });
+
+test('owner can save a valid calibration', () => assertSucceeds(setCal('owner', calibration())));
+test('owner can reset to uncalibrated', () =>
+  assertSucceeds(setCal('owner', { status: 'uncalibrated', calibratedAt: null, method: null })));
+test('stranger cannot calibrate', () => assertFails(setCal('stranger', calibration())));
+test('device itself cannot calibrate', () => assertFails(setCal('board', calibration())));
+test('buffers closer than 100 mV are rejected (probe not responding)', () =>
+  assertFails(setCal('owner', calibration({ ph7Mv: 2510, ph4Mv: 2560 }))));
+test('calibration needs both buffer voltages', () => {
+  const c = calibration();
+  delete c.ph4Mv;
+  return assertFails(setCal('owner', c));
+});
+test('calibration voltage out of range is rejected', () => assertFails(setCal('owner', calibration({ ph4Mv: 9000 }))));
+test('client-chosen calibration time is rejected', () =>
+  assertFails(setCal('owner', calibration({ calibratedAt: Timestamp.fromMillis(0) }))));
+test('extra calibration field is rejected', () => assertFails(setCal('owner', calibration({ slope: 3 }))));
+test('owner still cannot change other device fields with a calibration', () =>
+  assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { phCalibration: calibration(), deviceUid: 'owner' })));
+
 // --- readings: read ---
 test('owner can read readings', () => assertSucceeds(getDoc(doc(as('owner'), path('seed-0')))));
 test('stranger cannot read readings', () => assertFails(getDoc(doc(as('stranger'), path('seed-0')))));

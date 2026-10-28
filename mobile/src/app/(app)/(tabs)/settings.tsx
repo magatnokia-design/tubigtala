@@ -10,10 +10,12 @@ import { Notice } from '@/components/notice';
 import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { HEADER_CURVE, Radius, Spacing } from '@/constants/theme';
+import { formatDay } from '@/domain/dates';
 import { formatPhMobile } from '@/domain/phone';
 import { useAuth } from '@/hooks/use-auth';
 import { useDialog } from '@/hooks/use-dialog';
 import { useProfile } from '@/hooks/use-profile';
+import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/services/auth';
 import { notificationPermissionGranted, phoneNotificationsSupported, requestNotificationPermission } from '@/services/notifications';
@@ -26,6 +28,7 @@ export default function SettingsScreen() {
   const { user } = useAuth();
   const profile = useProfile();
   const dialog = useDialog();
+  const { device } = useSelectedDevice();
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<{ text: string; openSettings?: boolean } | null>(null);
   const [osPermission, setOsPermission] = useState<boolean | null>(null);
@@ -127,6 +130,21 @@ export default function SettingsScreen() {
               : <Switch value={p.smsAlertsEnabled} onValueChange={toggleSms} disabled={pending !== null || !p.phoneE164} {...switchColors} />}
           />
         </Section>
+
+        {device && (
+          <Section title="Device">
+            <Row icon="sensors" label={device.name} value={device.simulated ? 'Simulated' : undefined} />
+            <Row
+              icon="water_ph"
+              label="Calibrate pH"
+              value={device.phCalibration?.status === 'calibrated' && device.phCalibration.calibratedAtMs
+                ? `Calibrated ${formatDay(device.phCalibration.calibratedAtMs)}`
+                : 'Not calibrated'}
+              onPress={() => router.push('/calibrate-ph')}
+              chevron
+            />
+          </Section>
+        )}
 
         <Section title="Notifications">
           <Row

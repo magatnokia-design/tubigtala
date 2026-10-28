@@ -1,10 +1,11 @@
 // Firestore access for devices and readings (docs/data-model.md). Converts documents to the
 // app types and keeps null sensor values as null.
 import {
-  collection, doc, getDocs, limit, onSnapshot, orderBy, query, Timestamp, updateDoc, where,
+  collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where,
   type DocumentData, type FirestoreError, type QueryDocumentSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 
+import { CALIBRATION_METHOD } from '@/domain/calibration';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
 
@@ -18,7 +19,12 @@ function toDevice(s: QueryDocumentSnapshot<DocumentData>): Device {
     name: typeof d.name === 'string' ? d.name : s.id,
     simulated: d.simulated === true,
     readingIntervalSec: typeof d.readingIntervalSec === 'number' && d.readingIntervalSec > 0 ? d.readingIntervalSec : 60,
-    phCalibrationStatus: d.phCalibration?.status === 'calibrated' ? 'calibrated' : 'uncalibrated',
+    phCalibration: {
+      status: d.phCalibration?.status === 'calibrated' ? 'calibrated' : 'uncalibrated',
+      calibratedAtMs: millisOrNull(d.phCalibration?.calibratedAt),
+      ph7Mv: numOrNull(d.phCalibration?.ph7Mv),
+      ph4Mv: numOrNull(d.phCalibration?.ph4Mv),
+    },
   };
 }
 
@@ -86,6 +92,18 @@ export function subscribeReadingsSince(
     }),
     onError,
   );
+}
+
+/** Saves a two-point pH calibration; the board picks it up within ~10 minutes. */
+export function saveCalibration(deviceId: string, ph7Mv: number, ph4Mv: number): Promise<void> {
+  return updateDoc(doc(db, 'devices', deviceId), {
+    phCalibration: { status: 'calibrated', calibratedAt: serverTimestamp(), method: CALIBRATION_METHOD, ph7Mv, ph4Mv },
+  });
+}
+
+/** Back to the firmware's nominal constants (readings flagged uncalibrated). */
+export function resetCalibration(deviceId: string): Promise<void> {
+  return updateDoc(doc(db, 'devices', deviceId), { phCalibration: { status: 'uncalibrated', calibratedAt: null, method: null } });
 }
 
 export function renameDevice(deviceId: string, name: string): Promise<void> {

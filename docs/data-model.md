@@ -49,10 +49,10 @@ The document ID is `{deviceId}_{metric}_{readingId}`, enforced by the rules, so 
 | `deviceUid` | string | Firebase Auth uid the ESP32 signs in as. Only this account may write readings. Never the same as `ownerUid`. |
 | `simulated` | boolean | `true` for the `devtools/` simulator. Readings from a simulated device must carry `simulated: true` (enforced by rules). |
 | `readingIntervalSec` | number | How often the device is expected to send a reading. Drives stale/offline status. Default 60. |
-| `phCalibration` | map | `{ status: "uncalibrated" \| "calibrated", calibratedAt: timestamp \| null, method: string \| null }`. Informational; the per-reading `phCalibrated` flag is what the app shows. |
+| `phCalibration` | map | `{ status: "uncalibrated" \| "calibrated", calibratedAt: timestamp \| null, method: string \| null, ph7Mv?: number, ph4Mv?: number }`. Saved by the app's Calibrate pH screen (owner only; buffers ≥100 mV apart; `calibratedAt` = server time). The board reads it at start and every 10 min, applies `ph7Mv`/`ph4Mv` (module output in the pH 7 / pH 4 buffers, mV) and keeps a copy in flash. The per-reading `phCalibrated` flag records which was in use; stored readings are not recalculated. |
 | `createdAt` | timestamp | Server time. |
 
-Clients cannot create or delete devices yet. They are provisioned with `devtools/` (admin) until a claim flow exists. The owner may only rename (`name`).
+Clients cannot create or delete devices. They are provisioned by an admin (Firebase console, `docs/device-setup.md`; `devtools/` on the emulator). The owner may change only `name` and `phCalibration`. The board (its `deviceUid` account) may read its own device record, to pick up its calibration.
 
 ### `devices/{deviceId}/readings/{readingId}`
 
