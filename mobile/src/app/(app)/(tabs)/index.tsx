@@ -112,11 +112,11 @@ export default function WaterScreen() {
 
         <MetricCard
           icon="air"
-          label="Ammonia"
+          label="Ammonia gas"
           value={formatNumber(reading?.nh3GasMv ?? null, 0)}
           unit="mV"
           status={nh3}
-          note={`Gas above the water · normal ${normalRangeText('nh3GasMv')}`}
+          note={`In the air above the water · normal ${normalRangeText('nh3GasMv')}`}
           dimmed={dimmed}
           tags={[{ label: 'Relative, not ppm', tone: 'info' }, ...sim]}
         />

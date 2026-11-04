@@ -317,4 +317,5 @@ Planned architecture: ESP32 sensors → Firebase → Android mobile app, with ba
 ### Scope decisions
 
 - **No web client (24 Oct 2026).** The mobile app covers readings, history, alerts, and settings; a second front end would double the consistency work for a prototype. If a browser view is needed later, prefer Expo's web output from the same `mobile/` codebase over a separate React + Vite app, so the two cannot drift - and ask before adding it.
+- **One tank (4 Nov 2026).** One ESP32 with all three sensors in one fresh/tap-water tank. A "3 tanks" mode (the same board's sensors split across three tanks, chosen in Settings) was considered and dropped: each tank would get only one measurement, and switching modes would mislabel history. More tanks means more boards, which the app already supports as separate devices.
 - **Blaze, deferred (24 Oct 2026).** SMS and email must be sent from trusted backend code (Cloud Functions), which Spark cannot deploy. Putting TextBee/Brevo keys in the app or firmware instead was rejected because they can be extracted. Steps before alerts (sensors, data model, Firestore, mobile app) stay on Spark.

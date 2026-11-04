@@ -2,9 +2,13 @@
 // critical. The Water cards, alerts, Analytics insights and Excel export all use this, so
 // they cannot disagree. When Cloud Functions send alerts, move this to shared code.
 //
-// PLACEHOLDER VALUES (27 Oct 2026): the water type (fishpond, aquarium, tank) has not been
-// decided, so these are generic. Ammonia is an uncalibrated relative mV value; its ranges
-// are guesses until the real sensor's baseline is measured (docs/wiring.md).
+// Water type: fresh / tap water (decided 4 Nov 2026). pH 6.5-8.5 is the usual drinking-water
+// guideline range; temperature has no safety limit, so its range only flags unusual water.
+// Ammonia gas is an uncalibrated relative mV value; its ranges are PLACEHOLDERS until the
+// real sensor's baseline is measured (docs/wiring.md).
+//
+// Status words are plain on purpose ("too high", not "too basic"): they appear on the cards
+// and in alert titles, and a user should understand them without chemistry terms.
 
 export type Metric = 'ph' | 'temperatureC' | 'nh3GasMv';
 export type Level = 'normal' | 'warning' | 'critical' | 'unknown';
@@ -24,9 +28,9 @@ export const RANGES: Record<Metric, Range> = {
 
 export const METRIC_INFO: Record<Metric, { name: string; unit: string; decimals: number; low: [string, string]; high: [string, string] }> = {
   // [warning word, critical word]
-  ph: { name: 'pH level', unit: '', decimals: 1, low: ['Slightly acidic', 'Too acidic'], high: ['Slightly basic', 'Too basic'] },
-  temperatureC: { name: 'Temperature', unit: '°C', decimals: 1, low: ['Cool', 'Too cold'], high: ['Warm', 'Too hot'] },
-  nh3GasMv: { name: 'Ammonia', unit: 'mV', decimals: 0, low: ['Low', 'Low'], high: ['Elevated', 'High'] },
+  ph: { name: 'pH level', unit: '', decimals: 1, low: ['A bit low', 'Too low'], high: ['A bit high', 'Too high'] },
+  temperatureC: { name: 'Temperature', unit: '°C', decimals: 1, low: ['A bit cold', 'Too cold'], high: ['A bit warm', 'Too hot'] },
+  nh3GasMv: { name: 'Ammonia gas', unit: 'mV', decimals: 0, low: ['Low', 'Low'], high: ['A bit high', 'Too high'] },
 };
 
 export interface Status {
@@ -53,10 +57,11 @@ export function isEscalation(previous: Level, next: Level): boolean {
   return SEVERITY[next] > SEVERITY[previous];
 }
 
-/** "6.5 – 8.5" style text of the normal range, for alerts and exports. */
+/** "6.5 to 8.5" / "20 to 32 °C" / "up to 600 mV": the normal range in words, for alerts, the alert details and exports. */
 export function normalRangeText(metric: Metric): string {
   const { normal } = RANGES[metric];
   const { unit, decimals } = METRIC_INFO[metric];
-  const lo = metric === 'nh3GasMv' ? 'up to' : `${normal[0].toFixed(decimals)} –`;
-  return `${lo} ${normal[1].toFixed(decimals)}${unit ? ` ${unit}` : ''}`;
+  const n = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(decimals));
+  const lo = metric === 'nh3GasMv' ? 'up to' : `${n(normal[0])} to`;
+  return `${lo} ${n(normal[1])}${unit ? ` ${unit}` : ''}`;
 }

@@ -9,15 +9,18 @@ import { classify, isEscalation, normalRangeText } from './thresholds.ts';
 test('classify: boundaries are inclusive and words match direction', () => {
   assert.deepEqual(classify('ph', 6.5), { level: 'normal', label: 'Normal' });
   assert.deepEqual(classify('ph', 8.5), { level: 'normal', label: 'Normal' });
-  assert.deepEqual(classify('ph', 6.4), { level: 'warning', label: 'Slightly acidic' });
-  assert.deepEqual(classify('ph', 6.0), { level: 'warning', label: 'Slightly acidic' });
-  assert.deepEqual(classify('ph', 5.9), { level: 'critical', label: 'Too acidic' });
-  assert.deepEqual(classify('ph', 9.1), { level: 'critical', label: 'Too basic' });
-  assert.deepEqual(classify('temperatureC', 33), { level: 'warning', label: 'Warm' });
+  assert.deepEqual(classify('ph', 6.4), { level: 'warning', label: 'A bit low' });
+  assert.deepEqual(classify('ph', 6.0), { level: 'warning', label: 'A bit low' });
+  assert.deepEqual(classify('ph', 5.9), { level: 'critical', label: 'Too low' });
+  assert.deepEqual(classify('ph', 8.7), { level: 'warning', label: 'A bit high' });
+  assert.deepEqual(classify('ph', 9.1), { level: 'critical', label: 'Too high' });
+  assert.deepEqual(classify('temperatureC', 33), { level: 'warning', label: 'A bit warm' });
+  assert.deepEqual(classify('temperatureC', 18), { level: 'warning', label: 'A bit cold' });
   assert.deepEqual(classify('temperatureC', 14), { level: 'critical', label: 'Too cold' });
+  assert.deepEqual(classify('temperatureC', 36), { level: 'critical', label: 'Too hot' });
   assert.deepEqual(classify('nh3GasMv', 600), { level: 'normal', label: 'Normal' });
-  assert.deepEqual(classify('nh3GasMv', 750), { level: 'warning', label: 'Elevated' });
-  assert.deepEqual(classify('nh3GasMv', 950), { level: 'critical', label: 'High' });
+  assert.deepEqual(classify('nh3GasMv', 750), { level: 'warning', label: 'A bit high' });
+  assert.deepEqual(classify('nh3GasMv', 950), { level: 'critical', label: 'Too high' });
 });
 
 test('classify: missing is unknown, never normal', () => {
@@ -35,8 +38,8 @@ test('escalation only when it gets worse', () => {
 });
 
 test('range text', () => {
-  assert.equal(normalRangeText('ph'), '6.5 – 8.5');
-  assert.equal(normalRangeText('temperatureC'), '20.0 – 32.0 °C');
+  assert.equal(normalRangeText('ph'), '6.5 to 8.5');
+  assert.equal(normalRangeText('temperatureC'), '20 to 32 °C');
   assert.equal(normalRangeText('nh3GasMv'), 'up to 600 mV');
 });
 

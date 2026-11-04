@@ -33,7 +33,7 @@ Only the owner can read or write it; it cannot be deleted from the app. Email li
 
 ### `users/{uid}/notifications/{notificationId}`
 
-Alerts. Until Cloud Functions exist, the app raises them itself **while it is open** (`mobile/src/services/alerts.ts`, decision in `mobile/src/domain/alerts.ts`): one alert when a field's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`). Within 30 minutes of an alert, the same or a lower level does not alert again (a value bouncing across a limit); a worse level always does. Uncalibrated pH alerts say "(uncalibrated)". Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
+Alerts. Until Cloud Functions exist, the app raises them itself **while it is open** (`mobile/src/services/alerts.ts`, decision in `mobile/src/domain/alerts.ts`): one alert when a field's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`). Within 30 minutes of an alert, the same or a lower level does not alert again (a value bouncing across a limit); a worse level always does. Wording (`alertText` in `mobile/src/domain/alerts.ts`): the title names the device and what is wrong in plain words, e.g. "Tank 2: water too hot"; the body gives the value and normal range, e.g. "Water is 36.2 °C. Normal is 20 to 32 °C.", then caveats last: uncalibrated pH adds "The pH sensor is not calibrated yet, so this may be off.", simulated data adds "Test data, not a real sensor." Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
 
 The document ID is `{deviceId}_{metric}_{readingId}`, enforced by the rules. The owner may create alerts only for devices they own, mark them read, and delete them.
 
@@ -50,9 +50,32 @@ Shared by all of the user's phones, so one ongoing condition raises one alert ev
 
 Owner only. Each phone touches this record only when a field's status changes, not on every reading, to keep Firestore reads low. Verified on the emulator (28 Oct 2026): two phones racing on the same reading produce one alert; the loser gets `permission-denied` and does nothing on its next try.
 
-### Alert ranges (placeholder)
+### Alert ranges
 
-`mobile/src/domain/thresholds.ts` is the only definition: pH normal 6.5–8.5 (warning 6.0–9.0), temperature normal 20–32 °C (warning 15–35), ammonia normal up to 600 mV (warning up to 900). **Placeholders** until the water type is decided; ammonia ranges need the real sensor's baseline.
+Water type: **fresh / tap water** (decided 4 Nov 2026). `mobile/src/domain/thresholds.ts` is the only definition:
+
+| Field | Normal | Warning | Critical | Status words (cards and alert titles) |
+|---|---|---|---|---|
+| pH | 6.5–8.5 | 6.0–6.5 / 8.5–9.0 | below 6.0 / above 9.0 | A bit low, Too low / A bit high, Too high |
+| Temperature | 20–32 °C | 15–20 / 32–35 °C | below 15 / above 35 °C | A bit cold, Too cold / A bit warm, Too hot |
+| Ammonia gas | up to 600 mV | 600–900 mV | above 900 mV | A bit high, Too high |
+
+pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no safety limit for tap water; its range only flags unusual water. **Ammonia gas ranges are placeholders** until the real sensor's baseline is measured in clean air above clean water. Status words are plain on purpose ("too high", not "too basic").
+
+### Alert policy for SMS and email (planned, needs Blaze + Cloud Functions)
+
+Decided 4 Nov 2026; not built yet. Today only in-app/push alerts exist, raised while the app is open. The board never sends alerts; a Cloud Function evaluates each uploaded reading. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+
+| Event | Push | Email | SMS |
+|---|---|---|---|
+| pH or temperature warning | yes | yes | no |
+| pH or temperature critical | yes | yes | yes, after 3 critical readings in a row; pH only when calibrated |
+| Ammonia gas warning or critical | yes | yes | no (ranges are placeholders) |
+| A sensor sends no value for 10 min (gas: after warm-up) | yes | yes | no |
+| Device offline (no readings for 30 min) / back online | yes | yes | no |
+| SMS monthly limit reached | yes | yes | no |
+
+SMS rules: one SMS per ongoing condition (same cooldown as above); conditions on the same device within a few minutes go in one SMS; at most 5 per day and 250 per month across all devices (50 kept for testing), counted per recipient; past a cap, alerts still go by push and email and the app shows that the SMS limit was reached. SMS text uses no symbols such as "°" (they switch the SMS to a format that fits fewer than half as many characters), e.g. `TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM`. Check how TextBee counts multi-part SMS against the 300 before building. Email carries the reading, normal range, time, the last hour's trend and a note that this is a prototype sensor, not a lab test.
 
 ### `devices/{deviceId}`
 

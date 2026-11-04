@@ -28,13 +28,30 @@ export function shouldAlert(state: AlertState | null, next: Level, nowMs: number
   return true;
 }
 
-/** Title and body of an alert. Uncalibrated pH says so (CLAUDE.md: never assume calibration). */
+// How each field is named in an alert: in the title ("Tank 2: water too hot") and at the
+// start of the body sentence ("Water is 36.2 °C."). Ammonia says "gas above the water"
+// because the MQ sensor measures air, not the water itself (CLAUDE.md).
+const SUBJECT: Record<Metric, { title: string; sentence: string }> = {
+  ph: { title: 'pH', sentence: 'pH' },
+  temperatureC: { title: 'water', sentence: 'Water' },
+  nh3GasMv: { title: 'ammonia gas', sentence: 'Ammonia gas above the water' },
+};
+
+/**
+ * Title and body of an alert, written so the title alone says what is wrong:
+ * "Tank 1: pH too high" / "pH is 9.4. Normal is 6.5 to 8.5."
+ * Caveats come last: uncalibrated pH (CLAUDE.md: never assume calibration) and simulated data.
+ */
 export function alertText(metric: Metric, label: string, value: number | null, deviceName: string, opts: { simulated: boolean; uncalibrated: boolean }) {
   const info = METRIC_INFO[metric];
-  const qualifier = opts.uncalibrated ? ' (uncalibrated)' : '';
+  const subject = SUBJECT[metric];
   const shown = `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
+  const notes = [
+    opts.uncalibrated ? 'The pH sensor is not calibrated yet, so this may be off.' : '',
+    opts.simulated ? 'Test data, not a real sensor.' : '',
+  ].filter(Boolean);
   return {
-    title: `${info.name}: ${label}${qualifier}`,
-    body: `${deviceName}${opts.simulated ? ' (simulated)' : ''} · ${shown}${qualifier} · normal ${normalRangeText(metric)}`,
+    title: `${deviceName}: ${subject.title} ${label.toLowerCase()}`,
+    body: [`${subject.sentence} is ${shown}.`, `Normal is ${normalRangeText(metric)}.`, ...notes].join(' '),
   };
 }

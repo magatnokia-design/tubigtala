@@ -1,14 +1,6 @@
 // Interpretation of reading values for display. Chemistry only: nothing here says whether
 // water is safe, because the sensors cannot support that claim (CLAUDE.md).
 
-/** pH scale words. 7 is neutral; within 0.5 of it reads "neutral". */
-export function phDescriptor(ph: number | null): string {
-  if (ph === null) return 'No reading';
-  if (Math.abs(ph - 7) <= 0.5) return 'Neutral';
-  if (ph < 7) return ph >= 6 ? 'Slightly acidic' : 'Acidic';
-  return ph <= 8 ? 'Slightly basic' : 'Basic';
-}
-
 export interface Stats {
   min: number;
   max: number;

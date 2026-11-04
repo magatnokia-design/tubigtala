@@ -57,7 +57,7 @@ export function exportSheets(input: ExportInput): Sheet[] {
       ? 'pH: all readings are from an uncalibrated probe - indicative only.'
       : `pH: ${uncalibrated} of ${phReadings.length} readings are from an uncalibrated probe (see "pH calibrated"); the Summary pH figures mix both.`);
   }
-  if (metrics.includes('nh3GasMv')) notes.push('Ammonia: gas in the air above the water, uncalibrated relative mV (not ppm).');
+  if (metrics.includes('nh3GasMv')) notes.push('Ammonia gas: measured in the air above the water, uncalibrated relative mV (not ppm).');
   if (input.truncated) notes.push('Only the most recent readings in this range were included (read limit reached).');
 
   // ---- Summary (6 columns)

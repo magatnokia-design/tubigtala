@@ -19,7 +19,7 @@ import { useTheme } from '@/hooks/use-theme';
 const SLIDES: { icon: AndroidSymbol; title: string; body: string }[] = [
   { icon: 'water_ph', title: 'pH level', body: 'See if your water is acidic, neutral or basic.' },
   { icon: 'device_thermostat', title: 'Temperature', body: 'Live water temperature in °C.' },
-  { icon: 'air', title: 'Ammonia', body: 'Ammonia gas in the air above the water.' },
+  { icon: 'air', title: 'Ammonia gas', body: 'Ammonia gas in the air above the water.' },
   { icon: 'monitoring', title: 'Analytics', body: 'Trends for the last hour, day or week.' },
 ];
 

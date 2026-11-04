@@ -2,19 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { downsample, phDescriptor, stats } from './readings.ts';
-
-test('pH words', () => {
-  assert.equal(phDescriptor(null), 'No reading');
-  assert.equal(phDescriptor(7), 'Neutral');
-  assert.equal(phDescriptor(6.5), 'Neutral');
-  assert.equal(phDescriptor(7.5), 'Neutral');
-  assert.equal(phDescriptor(6.4), 'Slightly acidic');
-  assert.equal(phDescriptor(5.9), 'Acidic');
-  assert.equal(phDescriptor(7.6), 'Slightly basic');
-  assert.equal(phDescriptor(8.1), 'Basic');
-  assert.equal(phDescriptor(0), 'Acidic');
-});
+import { downsample, stats } from './readings.ts';
 
 test('stats skip missing values instead of counting them as zero', () => {
   assert.deepEqual(stats([7, null, 8, 9]), { min: 7, max: 9, avg: 8, count: 3 });
