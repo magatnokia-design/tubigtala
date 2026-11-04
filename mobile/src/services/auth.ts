@@ -1,11 +1,12 @@
 // Firebase Authentication access. Maps Firebase error codes to messages a user can act on.
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import {
-  GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithEmailAndPassword,
-  signOut as fbSignOut, type User,
+  createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithCredential,
+  signInWithEmailAndPassword, signOut as fbSignOut, updateProfile as updateAuthProfile, type User,
 } from 'firebase/auth';
 
 import { auth, usingEmulator } from '@/services/firebase';
+import { createProfile } from '@/services/profile';
 
 export type { User };
 
@@ -18,6 +19,17 @@ export function subscribeAuth(onChange: (user: User | null) => void) {
 
 export async function signIn(email: string, password: string): Promise<void> {
   await signInWithEmailAndPassword(auth, email.trim(), password);
+}
+
+/**
+ * Creates the Auth account, then the users/{uid} profile with the phone number. If the
+ * profile write fails after the account exists, the app routes to "Complete your profile",
+ * so the account is never left unusable.
+ */
+export async function signUp(name: string, email: string, password: string, phoneE164: string): Promise<void> {
+  const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  await updateAuthProfile(user, { displayName: name.trim() }).catch(() => undefined);
+  await createProfile(user.uid, name, phoneE164);
 }
 
 export class GoogleSignInUnavailableError extends Error {
@@ -78,6 +90,12 @@ export function authErrorMessage(e: unknown): string {
       return 'Email or password is incorrect.';
     case 'auth/invalid-email':
       return 'That email address is not valid.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Sign in instead.';
+    case 'auth/weak-password':
+      return 'That password is too weak. Use at least 8 characters with letters and numbers.';
+    case 'permission-denied':
+      return 'Your details could not be saved. Check the mobile number and try again.';
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a minute and try again.';
     case 'auth/network-request-failed':

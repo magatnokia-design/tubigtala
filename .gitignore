@@ -53,3 +53,6 @@ Thumbs.db
 # exposed-key alerts. CI restores it from the GOOGLE_SERVICES_JSON_BASE64 secret.
 google-services.json
 GoogleService-Info.plist
+
+# Project instructions for Claude Code: kept local, not published (untracked since 4 Nov 2026)
+CLAUDE.md

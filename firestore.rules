@@ -13,16 +13,124 @@ service cloud.firestore {
       return v == null || ((v is int || v is float) && v >= lo && v <= hi);
     }
 
-    match /devices/{deviceId} {
-      allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    // One profile per account: name, PH mobile number and alert preferences. Personal data,
+    // so only its owner can read or write it.
+    match /users/{uid} {
+      function isOwner() {
+        return signedIn() && request.auth.uid == uid;
+      }
 
-      // Devices are provisioned with devtools (admin). The owner may only rename.
+      function validProfile(p) {
+        return p.keys().hasOnly(['displayName', 'phoneE164', 'smsAlertsEnabled', 'pushEnabled',
+                                 'createdAt', 'updatedAt'])
+          && p.keys().hasAll(['displayName', 'phoneE164', 'smsAlertsEnabled', 'pushEnabled',
+                              'createdAt', 'updatedAt'])
+          && p.displayName is string
+          && p.displayName.trim().size() >= 1 && p.displayName.size() <= 60
+          && (p.phoneE164 == null || (p.phoneE164 is string && p.phoneE164.matches('^[+]639[0-9]{9}$')))
+          && p.smsAlertsEnabled is bool
+          && (!p.smsAlertsEnabled || p.phoneE164 != null)
+          && p.pushEnabled is bool
+          && p.updatedAt == request.time;
+      }
+
+      allow read: if isOwner();
+      allow create: if isOwner()
+        && validProfile(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner()
+        && validProfile(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      // Last status per device and field, shared by all of the user's phones, so one ongoing
+      // condition raises one alert (domain/alerts.ts). Written in the same transaction as the alert.
+      match /alertState/{key} {
+        function validAlertState(s) {
+          return s.keys().hasOnly(['level', 'alertLevel', 'alertedAt', 'updatedAt'])
+            && s.keys().hasAll(['level', 'alertLevel', 'alertedAt', 'updatedAt'])
+            && s.level in ['normal', 'warning', 'critical']
+            && (s.alertLevel == null || s.alertLevel in ['warning', 'critical'])
+            && (s.alertedAt == null || s.alertedAt is timestamp)
+            && s.updatedAt == request.time;
+        }
+
+        allow read: if isOwner();
+        allow create, update: if isOwner()
+          && key.matches('^[A-Za-z0-9-]+_(ph|temperatureC|nh3GasMv)$')
+          && validAlertState(request.resource.data);
+      }
+
+      // Alerts. Until Cloud Functions exist the app raises them itself while open, so the owner
+      // may create one - only for their own device, in the fixed shape, unread, and with an ID
+      // derived from the reading so two phones open at once cannot create duplicates.
+      // The owner can mark them read and delete them.
+      match /notifications/{notificationId} {
+        function validAlert(n) {
+          return n.keys().hasOnly(['title', 'body', 'deviceId', 'metric', 'value', 'level', 'readingId', 'createdAt', 'read'])
+            && n.keys().hasAll(['title', 'body', 'deviceId', 'metric', 'value', 'level', 'readingId', 'createdAt', 'read'])
+            && n.title is string && n.title.size() >= 1 && n.title.size() <= 80
+            && n.body is string && n.body.size() <= 200
+            && n.deviceId is string
+            && n.metric in ['ph', 'temperatureC', 'nh3GasMv']
+            && (n.value == null || n.value is int || n.value is float)
+            && n.level in ['warning', 'critical']
+            && n.readingId is string && n.readingId.size() >= 1 && n.readingId.size() <= 64
+            && notificationId == n.deviceId + '_' + n.metric + '_' + n.readingId
+            && n.createdAt == request.time
+            && n.read == false
+            && get(/databases/$(database)/documents/devices/$(n.deviceId)).data.ownerUid == uid;
+        }
+
+        allow read: if isOwner();
+        allow create: if isOwner() && validAlert(request.resource.data);
+        allow update: if isOwner()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read is bool;
+        allow delete: if isOwner();
+      }
+    }
+
+    match /devices/{deviceId} {
+      // The owner reads it in the app; the board reads its own record to pick up its pH
+      // calibration (docs/device-setup.md).
+      allow read: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid || resource.data.deviceUid == request.auth.uid);
+
+      function validName(n) {
+        return n is string && n.trim().size() >= 1 && n.size() <= 40;
+      }
+
+      function differs(a, b, by) {
+        return a - b >= by || b - a >= by;
+      }
+
+      // Two-point pH calibration saved by the app's calibration screen. "calibrated" needs both
+      // buffer voltages (module output, mV), 100-1500 mV apart in either direction - the same rule
+      // as the app (domain/calibration.ts) and the firmware (cloud.cpp) - stamped with server time.
+      function validCalibration(c) {
+        return c is map
+          && c.keys().hasOnly(['status', 'calibratedAt', 'method', 'ph7Mv', 'ph4Mv'])
+          && (
+            (c.status == 'uncalibrated' && c.calibratedAt == null)
+            || (c.status == 'calibrated'
+                && c.keys().hasAll(['ph7Mv', 'ph4Mv'])
+                && (c.ph7Mv is int || c.ph7Mv is float) && c.ph7Mv >= 0 && c.ph7Mv <= 5500
+                && (c.ph4Mv is int || c.ph4Mv is float) && c.ph4Mv >= 0 && c.ph4Mv <= 5500
+                && differs(c.ph7Mv, c.ph4Mv, 100)
+                && c.ph7Mv - c.ph4Mv <= 1500 && c.ph4Mv - c.ph7Mv <= 1500
+                && c.calibratedAt == request.time
+                && c.method is string && c.method.size() <= 80)
+          );
+      }
+
+      // Devices are provisioned by an admin (Firebase console). The owner may rename the device
+      // and save or reset its pH calibration - nothing else.
       allow update: if signedIn()
         && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
-        && request.resource.data.name is string
-        && request.resource.data.name.trim().size() >= 1
-        && request.resource.data.name.size() <= 40;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phCalibration'])
+        && validName(request.resource.data.name)
+        && (!('phCalibration' in request.resource.data.diff(resource.data).affectedKeys())
+            || validCalibration(request.resource.data.phCalibration));
 
       match /readings/{readingId} {
         function device() {

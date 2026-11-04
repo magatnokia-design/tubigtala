@@ -1,15 +1,15 @@
-import { Pressable } from 'react-native';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 
-import { Icon } from '@/components/icon';
+import { AlertWatchers } from '@/components/alert-watcher';
 import { Colors } from '@/constants/theme';
-import { signOut } from '@/services/auth';
+import { useNotificationPrompt } from '@/hooks/use-notification-prompt';
+import { SelectedDeviceProvider } from '@/hooks/use-selected-device';
 
 export default function AppLayout() {
+  useNotificationPrompt();
   return (
-    <>
-      <StatusBar style="light" />
+    <SelectedDeviceProvider>
+      <AlertWatchers />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: Colors.light.tint },
@@ -18,19 +18,12 @@ export default function AppLayout() {
           headerShadowVisible: false,
           contentStyle: { backgroundColor: Colors.light.background },
         }}>
-        <Stack.Screen
-          name="index"
-          options={{
-            title: 'My devices',
-            headerRight: () => (
-              <Pressable onPress={() => signOut()} hitSlop={10} accessibilityLabel="Sign out">
-                <Icon name="logout" color="onTint" />
-              </Pressable>
-            ),
-          }}
-        />
-        <Stack.Screen name="device/[id]" options={{ title: 'Device' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+        <Stack.Screen name="edit-profile" options={{ title: 'Edit' }} />
+        <Stack.Screen name="export" options={{ title: 'Export to Excel', presentation: 'modal' }} />
+        <Stack.Screen name="calibrate-ph" options={{ title: 'Calibrate pH' }} />
       </Stack>
-    </>
+    </SelectedDeviceProvider>
   );
 }

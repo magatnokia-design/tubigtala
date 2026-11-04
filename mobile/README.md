@@ -13,7 +13,7 @@ npx expo lint
 
 | Path | What lives there |
 |---|---|
-| `src/app/` | Screens (Expo Router). `sign-in.tsx`, `(app)/index.tsx` device list, `(app)/device/[id].tsx` dashboard. Signed-in routes are guarded in `_layout.tsx`. |
+| `src/app/` | Screens (Expo Router). `_layout.tsx` decides what is reachable: `onboarding` -> `sign-in`/`sign-up` -> `complete-profile` (no phone yet) -> `(app)`. `(app)/(tabs)/`: `analytics`, `index` (Water, start tab), `settings`; plus `(app)/notifications` and `(app)/edit-profile`. |
 | `src/domain/` | Pure logic with tests: types, device status (live/stale/offline/no-data), formatting. |
 | `src/services/` | The only code that talks to Firebase. Screens never import `firebase/*`. |
 | `src/hooks/` | Auth state and live Firestore subscriptions as loading/ready/error states. |
