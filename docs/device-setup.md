@@ -2,7 +2,7 @@
 
 From a bare ESP32 to readings in the app. Do the wiring and calibration in `docs/wiring.md` first. Commands are PowerShell from `C:\App\TubigTala`.
 
-Status (27 Oct 2026): firmware 0.2.0 compiles; **never run on a board yet**. Every step below that touches hardware is untested until then.
+Status (4 Nov 2026): firmware 0.2.2 compiles; **never run on a board yet**. Every step below that touches hardware is untested until then.
 
 ## 1. Give the device its own login (Firebase console)
 
@@ -69,7 +69,7 @@ arduino-cli monitor -p COM5 -c baudrate=115200
 Expected, in order:
 
 ```
-TubigTala 0.2.1 boot 1a2b3c4d, DS18B20 count 1, pH UNCALIBRATED
+TubigTala 0.2.2 boot 1a2b3c4d, DS18B20 count 1, pH UNCALIBRATED
 Device tank-01, Wi-Fi "YourWifi", uploading to tubigtala-64d9e
 Type help for commands
 READING {"bootId":"1a2b3c4d","seq":0,...}
@@ -93,11 +93,11 @@ Type into the monitor and press Enter (Arduino IDE Serial Monitor: set the line 
 Example `diag` (values illustrative, not measured):
 
 ```
---- diag: TubigTala 0.2.1, boot 1a2b3c4d, up 95 s
+--- diag: TubigTala 0.2.2, boot 1a2b3c4d, up 95 s
 Wi-Fi:  connected to "YourWifi", signal -58 dBm, IP 192.168.1.40
 Clock:  2026-11-04 15:42:10 (UTC+8)
 Queue:  0 reading(s) waiting to upload
-pH cal: NOMINAL - not calibrated (pH 7 = 2500 mV, pH 4 = 3040 mV)
+pH cal: NOMINAL - not calibrated (pH 7.00 = 2500 mV, pH 4.00 = 3040 mV)
 Temp:   27.44 C (1 probe(s) found)
 pH:     G34 pin 1502 mV -> board 2503 mV -> pH 6.98 (uncalibrated)
 Gas:    G35 pin  410 mV -> board  683 mV (heater warming up, 85 s left)

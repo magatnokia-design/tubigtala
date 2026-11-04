@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/button';
@@ -8,7 +8,10 @@ import { LevelChip } from '@/components/level-chip';
 import { Notice } from '@/components/notice';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
-import { calibrationError, mvPerPh, phFromMv, stability, STABLE_READINGS, STABLE_WITHIN_MV } from '@/domain/calibration';
+import {
+  BUFFER_CHOICES, bufferText, calibrationError, DEFAULT_BUFFERS, mvPerPh, phFromMv, stability, STABLE_READINGS, STABLE_WITHIN_MV,
+  type Buffers,
+} from '@/domain/calibration';
 import { formatDay } from '@/domain/dates';
 import { formatNumber } from '@/domain/format';
 import { deviceStatus } from '@/domain/status';
@@ -21,11 +24,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { resetCalibration, saveCalibration } from '@/services/devices';
 
 type Step = 'ph7' | 'ph4' | 'review';
-const STEPS: { key: Step; label: string }[] = [
-  { key: 'ph7', label: 'pH 7' },
-  { key: 'ph4', label: 'pH 4' },
-  { key: 'review', label: 'Save' },
-];
 const WINDOW_MS = 30 * 60_000;
 
 /**
@@ -47,7 +45,16 @@ export default function CalibratePhScreen() {
   const [stepAfter, setStepAfter] = useState<number | null>(null);
   const [ph7Mv, setPh7Mv] = useState<number | null>(null);
   const [ph4Mv, setPh4Mv] = useState<number | null>(null);
+  // The buffers' true pH as printed on the sachet/bottle (7.00 or 6.86, 4.00 or 4.01).
+  const [buffers, setBuffers] = useState<Buffers>(DEFAULT_BUFFERS);
   const [busy, setBusy] = useState(false);
+  const b7 = bufferText(buffers.ph7);
+  const b4 = bufferText(buffers.ph4);
+  const steps: { key: Step; label: string }[] = [
+    { key: 'ph7', label: `pH ${b7}` },
+    { key: 'ph4', label: `pH ${b4}` },
+    { key: 'review', label: 'Save' },
+  ];
 
   const readings = useMemo(() => (history.status === 'ready' ? history.data.readings : []), [history]);
   const latest = readings.length ? readings[readings.length - 1] : null;
@@ -88,7 +95,7 @@ export default function CalibratePhScreen() {
     if (!device || ph7Mv === null || ph4Mv === null) return;
     setBusy(true);
     try {
-      await saveCalibration(device.id, ph7Mv, ph4Mv);
+      await saveCalibration(device.id, ph7Mv, ph4Mv, buffers);
       await dialog.notify({ tone: 'success', title: 'pH calibrated', message: 'The device applies it within about 10 minutes.' });
       router.back();
     } catch {
@@ -109,13 +116,13 @@ export default function CalibratePhScreen() {
     return <View style={styles.pad}><Notice tone="warning">No device connected. Calibration needs a device sending readings.</Notice></View>;
   }
 
-  const stepIndex = STEPS.findIndex((x) => x.key === step);
+  const stepIndex = steps.findIndex((x) => x.key === step);
   const reviewError = ph7Mv !== null && ph4Mv !== null ? calibrationError(ph7Mv, ph4Mv) : undefined;
 
   return (
     <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
       <View style={styles.progress}>
-        {STEPS.map((x, i) => (
+        {steps.map((x, i) => (
           <View key={x.key} style={styles.progressItem}>
             <View style={[styles.progressBar, { backgroundColor: i <= stepIndex ? theme.tint : theme.border }]} />
             <ThemedText type="small" style={{ color: i <= stepIndex ? theme.tint : theme.textSecondary, fontWeight: i === stepIndex ? 700 : 500 }}>{x.label}</ThemedText>
@@ -137,12 +144,29 @@ export default function CalibratePhScreen() {
       {step !== 'review' ? (
         <>
           <View style={[styles.card, { borderColor: theme.border }]}>
-            <ThemedText style={styles.title}>{step === 'ph7' ? 'Put the probe in pH 7.00 buffer' : 'Rinse, then pH 4.00 buffer'}</ThemedText>
+            <ThemedText style={styles.title}>{step === 'ph7' ? `Put the probe in pH ${b7} buffer` : `Rinse, then pH ${b4} buffer`}</ThemedText>
             <ThemedText themeColor="textSecondary">
               {step === 'ph7'
-                ? 'Rinse the probe with clean water, place it in the pH 7 solution and keep it still.'
-                : 'Rinse the probe again, place it in the pH 4 solution and keep it still.'}
+                ? `Rinse the probe with clean water, place it in the pH ${b7} solution and keep it still.`
+                : `Rinse the probe again, place it in the pH ${b4} solution and keep it still.`}
             </ThemedText>
+
+            <ThemedText type="small" themeColor="textSecondary" style={styles.choiceLabel}>Your buffer, as printed on the pack:</ThemedText>
+            <View style={[styles.segment, { backgroundColor: theme.backgroundElement }]}>
+              {BUFFER_CHOICES[step].map((v) => {
+                const selected = buffers[step] === v;
+                return (
+                  <Pressable
+                    key={v}
+                    onPress={() => setBuffers((b) => ({ ...b, [step]: v }))}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    style={[styles.segmentItem, selected && { backgroundColor: theme.tint }]}>
+                    <ThemedText type="smallBold" style={{ color: selected ? theme.onTint : theme.text }}>{`pH ${bufferText(v)}`}</ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             <View style={styles.readout}>
               <ThemedText style={styles.mv}>{s.value === null ? '—' : s.value.toLocaleString()}</ThemedText>
@@ -158,24 +182,24 @@ export default function CalibratePhScreen() {
           </View>
 
           <Button
-            label={step === 'ph7' ? 'Save pH 7 point' : 'Save pH 4 point'}
+            label={step === 'ph7' ? `Save pH ${b7} point` : `Save pH ${b4} point`}
             icon="check_circle"
             onPress={savePoint}
             disabled={s.value === null || !live || !online}
           />
-          {step === 'ph4' && <Button label="Back to pH 7" variant="text" onPress={() => goTo('ph7')} />}
+          {step === 'ph4' && <Button label={`Back to pH ${b7}`} variant="text" onPress={() => goTo('ph7')} />}
         </>
       ) : (
         <>
           <View style={[styles.card, { borderColor: theme.border }]}>
             <ThemedText style={styles.title}>Review</ThemedText>
-            <Row label="pH 7 buffer" value={`${ph7Mv?.toLocaleString()} mV`} />
-            <Row label="pH 4 buffer" value={`${ph4Mv?.toLocaleString()} mV`} />
+            <Row label={`pH ${b7} buffer`} value={`${ph7Mv?.toLocaleString()} mV`} />
+            <Row label={`pH ${b4} buffer`} value={`${ph4Mv?.toLocaleString()} mV`} />
             {ph7Mv !== null && ph4Mv !== null && !reviewError && (
               <>
-                <Row label="Sensitivity" value={`${formatNumber(mvPerPh(ph7Mv, ph4Mv), 0)} mV per pH`} />
+                <Row label="Sensitivity" value={`${formatNumber(mvPerPh(ph7Mv, ph4Mv, buffers), 0)} mV per pH`} />
                 {latest?.phMv != null && (
-                  <Row label="Probe now reads" value={`pH ${formatNumber(phFromMv(latest.phMv, ph7Mv, ph4Mv), 2)}`} />
+                  <Row label="Probe now reads" value={`pH ${formatNumber(phFromMv(latest.phMv, ph7Mv, ph4Mv, buffers), 2)}`} />
                 )}
               </>
             )}
@@ -212,4 +236,7 @@ const styles = StyleSheet.create({
   mv: { fontSize: 48, lineHeight: 54, fontWeight: 700 },
   mvUnit: { fontSize: 18 },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.one },
+  choiceLabel: { marginTop: Spacing.two },
+  segment: { flexDirection: 'row', borderRadius: Radius.pill, padding: 3 },
+  segmentItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.two, borderRadius: Radius.pill, minHeight: 40 },
 });

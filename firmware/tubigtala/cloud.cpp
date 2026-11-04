@@ -39,7 +39,8 @@ static Reading queue[UPLOAD_QUEUE_SIZE];
 static uint8_t deniedCount[UPLOAD_QUEUE_SIZE];
 static size_t qHead = 0, qCount = 0;
 
-static PhCalibration calibration{false, PH7_MV, PH4_MV};
+static const PhCalibration NOMINAL_CALIBRATION{false, PH7_MV, PH4_MV, PH7_BUFFER, PH4_BUFFER};
+static PhCalibration calibration = NOMINAL_CALIBRATION;
 static uint32_t nextCalibrationFetchMs = 0;  // 0 = due now (first pass after boot)
 
 static uint32_t nextAttemptMs = 0;
@@ -225,6 +226,8 @@ static void saveCalibrationToFlash() {
   prefs.putBool("phCal", calibration.calibrated);
   prefs.putFloat("ph7Mv", calibration.ph7Mv);
   prefs.putFloat("ph4Mv", calibration.ph4Mv);
+  prefs.putFloat("ph7Buf", calibration.ph7Buffer);
+  prefs.putFloat("ph4Buf", calibration.ph4Buffer);
   prefs.end();
 }
 
@@ -232,8 +235,11 @@ static void loadCalibrationFromFlash() {
   Preferences prefs;
   prefs.begin("tubigtala", true);
   if (prefs.getBool("phCal", false)) {
-    calibration = {true, prefs.getFloat("ph7Mv", PH7_MV), prefs.getFloat("ph4Mv", PH4_MV)};
-    Serial.printf("[cloud] pH calibration from flash: pH7 %.0f mV, pH4 %.0f mV\n", calibration.ph7Mv, calibration.ph4Mv);
+    // ph7Buf/ph4Buf are missing in flash written by firmware before 0.2.2: then 7.00 / 4.00.
+    calibration = {true, prefs.getFloat("ph7Mv", PH7_MV), prefs.getFloat("ph4Mv", PH4_MV),
+                   prefs.getFloat("ph7Buf", PH7_BUFFER), prefs.getFloat("ph4Buf", PH4_BUFFER)};
+    Serial.printf("[cloud] pH calibration from flash: pH %.2f = %.0f mV, pH %.2f = %.0f mV\n",
+                  calibration.ph7Buffer, calibration.ph7Mv, calibration.ph4Buffer, calibration.ph4Mv);
   }
   prefs.end();
 }
@@ -258,18 +264,28 @@ static bool fetchCalibration() {
   bool calibrated = f["status"]["stringValue"] == "calibrated";
   float ph7 = firestoreNumber(f["ph7Mv"]);
   float ph4 = firestoreNumber(f["ph4Mv"]);
-  // Same sanity rule as the app (domain/calibration.ts) and firestore.rules: buffers between
-  // 100 and 1500 mV apart, either direction (some pH modules invert their output).
-  if (calibrated && (isnan(ph7) || isnan(ph4) || fabsf(ph7 - ph4) < 100 || fabsf(ph7 - ph4) > 1500)) {
+  // The buffers' true pH; absent in records saved before they existed -> 7.00 / 4.00.
+  float buf7 = f.containsKey("ph7BufferPh") ? firestoreNumber(f["ph7BufferPh"]) : PH7_BUFFER;
+  float buf4 = f.containsKey("ph4BufferPh") ? firestoreNumber(f["ph4BufferPh"]) : PH4_BUFFER;
+  // Same sanity rules as the app (domain/calibration.ts) and firestore.rules: buffers between
+  // 100 and 1500 mV apart, either direction (some pH modules invert their output), and buffer
+  // values in their accepted ranges.
+  if (calibrated && (isnan(ph7) || isnan(ph4) || fabsf(ph7 - ph4) < 100 || fabsf(ph7 - ph4) > 1500 ||
+                     isnan(buf7) || isnan(buf4) || buf7 < PH7_BUFFER_MIN || buf7 > PH7_BUFFER_MAX ||
+                     buf4 < PH4_BUFFER_MIN || buf4 > PH4_BUFFER_MAX)) {
     Serial.println("[cloud] ignoring invalid pH calibration in device record");
     return true;
   }
-  PhCalibration next = calibrated ? PhCalibration{true, ph7, ph4} : PhCalibration{false, PH7_MV, PH4_MV};
-  if (next.calibrated != calibration.calibrated || next.ph7Mv != calibration.ph7Mv || next.ph4Mv != calibration.ph4Mv) {
+  PhCalibration next = calibrated ? PhCalibration{true, ph7, ph4, buf7, buf4} : NOMINAL_CALIBRATION;
+  if (next.calibrated != calibration.calibrated || next.ph7Mv != calibration.ph7Mv || next.ph4Mv != calibration.ph4Mv ||
+      next.ph7Buffer != calibration.ph7Buffer || next.ph4Buffer != calibration.ph4Buffer) {
     calibration = next;
     saveCalibrationToFlash();
-    if (calibration.calibrated) Serial.printf("[cloud] pH calibration applied: pH7 %.0f mV, pH4 %.0f mV\n", ph7, ph4);
-    else Serial.println("[cloud] pH calibration removed, using nominal values");
+    if (calibration.calibrated) {
+      Serial.printf("[cloud] pH calibration applied: pH %.2f = %.0f mV, pH %.2f = %.0f mV\n", buf7, ph7, buf4, ph4);
+    } else {
+      Serial.println("[cloud] pH calibration removed, using nominal values");
+    }
   }
   return true;
 }

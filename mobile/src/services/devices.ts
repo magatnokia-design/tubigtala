@@ -5,7 +5,7 @@ import {
   type DocumentData, type FirestoreError, type QueryDocumentSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 
-import { CALIBRATION_METHOD } from '@/domain/calibration';
+import { calibrationMethod, DEFAULT_BUFFERS, type Buffers } from '@/domain/calibration';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
 
@@ -24,6 +24,8 @@ function toDevice(s: QueryDocumentSnapshot<DocumentData>): Device {
       calibratedAtMs: millisOrNull(d.phCalibration?.calibratedAt),
       ph7Mv: numOrNull(d.phCalibration?.ph7Mv),
       ph4Mv: numOrNull(d.phCalibration?.ph4Mv),
+      ph7BufferPh: numOrNull(d.phCalibration?.ph7BufferPh) ?? DEFAULT_BUFFERS.ph7,
+      ph4BufferPh: numOrNull(d.phCalibration?.ph4BufferPh) ?? DEFAULT_BUFFERS.ph4,
     },
   };
 }
@@ -94,10 +96,13 @@ export function subscribeReadingsSince(
   );
 }
 
-/** Saves a two-point pH calibration; the board picks it up within ~10 minutes. */
-export function saveCalibration(deviceId: string, ph7Mv: number, ph4Mv: number): Promise<void> {
+/** Saves a two-point pH calibration with the buffers' true pH; the board picks it up within ~10 minutes. */
+export function saveCalibration(deviceId: string, ph7Mv: number, ph4Mv: number, buffers: Buffers): Promise<void> {
   return updateDoc(doc(db, 'devices', deviceId), {
-    phCalibration: { status: 'calibrated', calibratedAt: serverTimestamp(), method: CALIBRATION_METHOD, ph7Mv, ph4Mv },
+    phCalibration: {
+      status: 'calibrated', calibratedAt: serverTimestamp(), method: calibrationMethod(buffers),
+      ph7Mv, ph4Mv, ph7BufferPh: buffers.ph7, ph4BufferPh: buffers.ph4,
+    },
   });
 }
 

@@ -1,6 +1,25 @@
-// Two-point pH calibration (pH 7 and pH 4 buffers). The formula must match phFromMv() in
-// firmware/tubigtala/tubigtala.ino - the board applies the saved voltages, the app only
-// previews the result.
+// Two-point pH calibration with a neutral (~7) and an acid (~4) buffer. The formula must match
+// phFromMv() in firmware/tubigtala/tubigtala.ino - the board applies the saved voltages, the app
+// only previews the result.
+//
+// The buffers' true pH is used, not a rounded 7 and 4: common kits in the Philippines are
+// 6.86 / 4.01 (/ 9.18), and treating 6.86 as 7.00 would shift every reading by ~0.15-0.25 pH.
+// Buffer values are as printed for 25 °C; temperature effects on the buffer are not corrected.
+
+export interface Buffers {
+  /** true pH of the neutral buffer, e.g. 7.00 or 6.86 */
+  ph7: number;
+  /** true pH of the acid buffer, e.g. 4.00 or 4.01 */
+  ph4: number;
+}
+
+/** What older calibrations (saved before buffer values were recorded) were made with. */
+export const DEFAULT_BUFFERS: Buffers = { ph7: 7.0, ph4: 4.0 };
+/** Buffer kits the screen offers (both sold locally). */
+export const BUFFER_CHOICES = { ph7: [7.0, 6.86], ph4: [4.0, 4.01] } as const;
+/** Accepted buffer values - also enforced by firestore.rules and the firmware (cloud.cpp). */
+export const PH7_BUFFER_RANGE: [number, number] = [6.5, 7.5];
+export const PH4_BUFFER_RANGE: [number, number] = [3.5, 4.5];
 
 /** Buffer voltages closer than this mean the probe is not responding (also enforced by the rules). */
 export const MIN_BUFFER_GAP_MV = 100;
@@ -11,17 +30,22 @@ export const STABLE_WITHIN_MV = 5;
 /** How many recent readings must agree before a buffer value can be saved. */
 export const STABLE_READINGS = 3;
 
-export const CALIBRATION_METHOD = 'Two-point, pH 7 and pH 4 buffers (app)';
+/** "6.86" / "7.00": how buffer values are shown and stored in the method text. */
+export const bufferText = (ph: number) => ph.toFixed(2);
 
-/** Linear fit through the two buffer points. */
-export function phFromMv(mv: number, ph7Mv: number, ph4Mv: number): number {
-  const slope = (7 - 4) / (ph7Mv - ph4Mv);
-  return 7 + (mv - ph7Mv) * slope;
+export function calibrationMethod(b: Buffers): string {
+  return `Two-point, pH ${bufferText(b.ph7)} and pH ${bufferText(b.ph4)} buffers (app)`;
+}
+
+/** Linear fit through the two buffer points: (ph7Mv, b.ph7) and (ph4Mv, b.ph4). */
+export function phFromMv(mv: number, ph7Mv: number, ph4Mv: number, b: Buffers = DEFAULT_BUFFERS): number {
+  const slope = (b.ph7 - b.ph4) / (ph7Mv - ph4Mv);
+  return b.ph7 + (mv - ph7Mv) * slope;
 }
 
 /** Probe sensitivity in mV per pH unit (absolute). */
-export function mvPerPh(ph7Mv: number, ph4Mv: number): number {
-  return Math.abs(ph7Mv - ph4Mv) / 3;
+export function mvPerPh(ph7Mv: number, ph4Mv: number, b: Buffers = DEFAULT_BUFFERS): number {
+  return Math.abs(ph7Mv - ph4Mv) / (b.ph7 - b.ph4);
 }
 
 export function calibrationError(ph7Mv: number, ph4Mv: number): string | undefined {

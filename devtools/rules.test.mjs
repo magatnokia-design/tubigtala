@@ -87,6 +87,13 @@ test('calibration voltage out of range is rejected', () => assertFails(setCal('o
 test('client-chosen calibration time is rejected', () =>
   assertFails(setCal('owner', calibration({ calibratedAt: Timestamp.fromMillis(0) }))));
 test('extra calibration field is rejected', () => assertFails(setCal('owner', calibration({ slope: 3 }))));
+test('true buffer values (6.86 / 4.01 kit) are accepted', () =>
+  assertSucceeds(setCal('owner', calibration({ ph7BufferPh: 6.86, ph4BufferPh: 4.01 }))));
+test('buffer values outside 6.5-7.5 / 3.5-4.5 are rejected', async () => {
+  await assertFails(setCal('owner', calibration({ ph7BufferPh: 9.18, ph4BufferPh: 4.01 })));
+  await assertFails(setCal('owner', calibration({ ph7BufferPh: 6.86, ph4BufferPh: 6.86 })));
+  await assertFails(setCal('owner', calibration({ ph7BufferPh: '6.86' })));
+});
 test('owner still cannot change other device fields with a calibration', () =>
   assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { phCalibration: calibration(), deviceUid: 'owner' })));
 
