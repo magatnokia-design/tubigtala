@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ALERT_COOLDOWN_MS, alertText, shouldAlert, type AlertState } from './alerts.ts';
+import { ALERT_COOLDOWN_MS, alertText, nextAlertStep, shouldAlert, type AlertState } from './alerts.ts';
 
 const T = 1_800_000_000_000;
 const state = (s: Partial<AlertState>): AlertState => ({ level: 'normal', alertLevel: null, alertedAtMs: null, ...s });
@@ -35,6 +35,17 @@ test('recovering then relapsing after the cooldown alerts again', () => {
   const s = state({ level: 'normal', alertLevel: 'warning', alertedAtMs: T });
   assert.equal(shouldAlert(s, 'warning', T + 10 * 60_000), false);
   assert.equal(shouldAlert(s, 'warning', T + ALERT_COOLDOWN_MS + 1), true);
+});
+
+test('nextAlertStep: raise, update the level only, or do nothing', () => {
+  assert.deepEqual(nextAlertStep(null, 'unknown', T), { kind: 'none' });
+  assert.deepEqual(nextAlertStep(null, 'normal', T), { kind: 'update', state: { level: 'normal', alertLevel: null, alertedAtMs: null } });
+  assert.deepEqual(nextAlertStep(state({}), 'normal', T), { kind: 'none' });
+  assert.deepEqual(nextAlertStep(state({}), 'critical', T), { kind: 'raise', state: { level: 'critical', alertLevel: 'critical', alertedAtMs: T } });
+  // improving keeps the last alert, so the cooldown still applies
+  const after = state({ level: 'critical', alertLevel: 'critical', alertedAtMs: T });
+  assert.deepEqual(nextAlertStep(after, 'warning', T + 60_000), { kind: 'update', state: { level: 'warning', alertLevel: 'critical', alertedAtMs: T } });
+  assert.deepEqual(nextAlertStep(after, 'critical', T + 60_000), { kind: 'none' });
 });
 
 test('alert title says which tank and what is wrong, in plain words', () => {

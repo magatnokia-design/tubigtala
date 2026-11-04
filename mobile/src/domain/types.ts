@@ -7,9 +7,12 @@ export type PhCalibrationStatus = 'uncalibrated' | 'calibrated';
 export interface PhCalibration {
   status: PhCalibrationStatus;
   calibratedAtMs: number | null;
-  /** module output in the pH 7 / pH 4 buffers, mV; null unless calibrated */
+  /** module output in the neutral (~7) / acid (~4) buffers, mV; null unless calibrated */
   ph7Mv: number | null;
   ph4Mv: number | null;
+  /** true pH of those buffers, e.g. 6.86 / 4.01; 7.00 / 4.00 for calibrations saved before these existed */
+  ph7BufferPh: number;
+  ph4BufferPh: number;
 }
 
 export interface Device {

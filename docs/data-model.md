@@ -14,7 +14,14 @@ devices/{deviceId}                           one monitoring unit (ESP32 + probes
 devices/{deviceId}/readings/{readingId}      one sample from that unit
 ```
 
-Planned, not built yet: `alertRules`, `alertEvents` (step 6, needs Cloud Functions / Blaze).
+Server-only (written by Cloud Functions with firebase-admin; no app account can read or write them, tested in `devtools/rules.test.mjs`):
+
+```
+alertDeliveries/{id}   one email or SMS: email_{uid}_{deviceId}_{readingId} or sms_{uid}_{deviceId}_{metric}_{alertedAtMs}
+smsBudget/global       SMS counted per Philippine day and month, for the caps
+```
+
+`alertDeliveries` fields: `channel` (`email`/`sms`), `uid`, `deviceId`, `readingId`, `metric` (SMS), `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
 
 ### `users/{uid}`
 
@@ -62,9 +69,9 @@ Water type: **fresh / tap water** (decided 4 Nov 2026). `mobile/src/domain/thres
 
 pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no safety limit for tap water; its range only flags unusual water. **Ammonia gas ranges are placeholders** until the real sensor's baseline is measured in clean air above clean water. Status words are plain on purpose ("too high", not "too basic").
 
-### Alert policy for SMS and email (planned, needs Blaze + Cloud Functions)
+### Alert policy for SMS and email
 
-Decided 4 Nov 2026; not built yet. Today only in-app/push alerts exist, raised while the app is open. The board never sends alerts; a Cloud Function evaluates each uploaded reading. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+Decided 4 Nov 2026. **Built for reading alerts in `functions/` and tested on the emulator; not deployed** (needs Blaze), and SMS/email go to log-only providers until TextBee/Brevo are added. Not built yet: push from the server (the app does not store push tokens yet), the offline / sensor-not-reading checks, the "SMS limit reached" notice in the app, and an email on/off switch (the server treats a missing `emailAlertsEnabled` as on). The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
 
 | Event | Push | Email | SMS |
 |---|---|---|---|
@@ -86,7 +93,7 @@ SMS rules: one SMS per ongoing condition (same cooldown as above); conditions on
 | `deviceUid` | string | Firebase Auth uid the ESP32 signs in as. Only this account may write readings. Never the same as `ownerUid`. |
 | `simulated` | boolean | `true` for the `devtools/` simulator. Readings from a simulated device must carry `simulated: true` (enforced by rules). |
 | `readingIntervalSec` | number | How often the device is expected to send a reading. Drives stale/offline status. Default 60. |
-| `phCalibration` | map | `{ status: "uncalibrated" \| "calibrated", calibratedAt: timestamp \| null, method: string \| null, ph7Mv?: number, ph4Mv?: number }`. Saved by the app's Calibrate pH screen (owner only; buffers ≥100 mV apart; `calibratedAt` = server time). The board reads it at start and every 10 min, applies `ph7Mv`/`ph4Mv` (module output in the pH 7 / pH 4 buffers, mV) and keeps a copy in flash. The per-reading `phCalibrated` flag records which was in use; stored readings are not recalculated. |
+| `phCalibration` | map | `{ status: "uncalibrated" \| "calibrated", calibratedAt: timestamp \| null, method: string \| null, ph7Mv?: number, ph4Mv?: number, ph7BufferPh?: number, ph4BufferPh?: number }`. Saved by the app's Calibrate pH screen (owner only; buffers 100–1500 mV apart; `calibratedAt` = server time). `ph7Mv`/`ph4Mv`: module output in the neutral / acid buffer, mV. `ph7BufferPh`/`ph4BufferPh`: those buffers' true pH, 6.5–7.5 and 3.5–4.5 (e.g. 6.86 / 4.01); absent in calibrations saved before 4 Nov 2026, which means 7.00 / 4.00. pH = `ph7BufferPh + (mV − ph7Mv) × (ph7BufferPh − ph4BufferPh) / (ph7Mv − ph4Mv)`, identical in `mobile/src/domain/calibration.ts` and the firmware. The board reads the record at start and every 10 min, applies it and keeps a copy in flash. The per-reading `phCalibrated` flag records which was in use; stored readings are not recalculated. |
 | `createdAt` | timestamp | Server time. |
 
 Clients cannot create or delete devices. They are provisioned by an admin (Firebase console, `docs/device-setup.md`; `devtools/` on the emulator). The owner may change only `name` and `phCalibration`. The board (its `deviceUid` account) may read its own device record, to pick up its calibration.

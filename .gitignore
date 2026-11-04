@@ -56,3 +56,6 @@ GoogleService-Info.plist
 
 # Project instructions for Claude Code: kept local, not published (untracked since 4 Nov 2026)
 CLAUDE.md
+
+# Cloud Functions build output (rebuilt by "npm run build" and on deploy)
+functions/lib/

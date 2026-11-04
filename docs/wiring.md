@@ -34,13 +34,17 @@ pH and MQ-137 boards powered at 5 V can output up to ~5 V. Before wiring to the 
 
 ## Calibration
 
-### pH (two-point, pH 7 and pH 4 buffers) - done in the app, no re-flashing
+### pH (two-point, neutral and acid buffer) - done in the app, no re-flashing
+
+Buffers: either a **7.00 / 4.00** kit or the common **6.86 / 4.01 / 9.18** powder kit (the 9.18 is not needed). Powder sachets: dissolve one in 250 mL distilled water in a clean container; label it. The app uses the buffer's **true** value: treating 6.86 as 7.00 would shift every reading by about 0.15-0.25 pH. Values are as printed for 25 °C; buffer temperature effects are not corrected.
+
+Probe care (from the probe's manual): before first use, or after long storage, soak the bulb and junction for 8 hours in 3 mol/L KCl storage solution, or in the pH 4.01 buffer if there is no KCl. Store it the same way; never dry and never in distilled water. If the probe has a fill hole, slide its rubber sleeve off while measuring.
 
 1. Let the probe and buffers reach room temperature. Rinse the probe with distilled water between buffers.
-2. App: **Settings > Device > Calibrate pH**. Put the probe in pH 7.00 buffer and wait for **Stable** (3 readings within 5 mV - about 3 minutes at one reading a minute), then **Save pH 7 point**.
-3. Rinse, pH 4.00 buffer, wait for Stable, **Save pH 4 point**, review, **Save calibration**.
-4. The board picks it up within 10 minutes (serial: `[cloud] pH calibration applied`) and keeps it in flash.
-5. Check: back in pH 7 buffer, the reported pH should be within ±0.1 of 7.
+2. App: **Settings > Device > Calibrate pH**. Choose your neutral buffer (**pH 7.00** or **pH 6.86**), put the probe in it and wait for **Stable** (3 readings within 5 mV - about 3 minutes at one reading a minute), then **Save pH … point**.
+3. Rinse, choose your acid buffer (**pH 4.00** or **pH 4.01**), probe in it, wait for Stable, **Save pH … point**, review, **Save calibration**. The buffer values are saved with the calibration (`ph7BufferPh` / `ph4BufferPh`).
+4. The board picks it up within 10 minutes (serial: `[cloud] pH calibration applied: pH 6.86 = … mV, pH 4.01 = … mV`) and keeps it in flash.
+5. Check: back in the neutral buffer, the reported pH should be within ±0.1 of that buffer's value (e.g. 6.86).
 
 Until then, readings use the nominal `PH7_MV`/`PH4_MV` in `config.h`, carry `phCalibrated: false`, and the app labels pH as uncalibrated.
 

@@ -2,7 +2,7 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.2.1"
+#define FIRMWARE_VERSION "0.2.2"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V
@@ -24,6 +24,14 @@
 // Device > Calibrate pH). Readings are flagged phCalibrated=false while these are in use.
 #define PH7_MV 2500.0f  // nominal, not measured
 #define PH4_MV 3040.0f  // nominal, not measured
+// Buffers' true pH when the calibration record has none (saved before buffer values existed).
+// Accepted ranges match domain/calibration.ts and firestore.rules (e.g. 6.86 / 4.01 kits).
+#define PH7_BUFFER 7.0f
+#define PH4_BUFFER 4.0f
+#define PH7_BUFFER_MIN 6.5f
+#define PH7_BUFFER_MAX 7.5f
+#define PH4_BUFFER_MIN 3.5f
+#define PH4_BUFFER_MAX 4.5f
 
 // MQ-137 heater warm-up after power-on; nh3GasMv is null until it passes
 #define NH3_WARMUP_MS 180000UL

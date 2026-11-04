@@ -1,6 +1,7 @@
 // Alert ranges: the one place that decides whether a reading is normal, a warning or
 // critical. The Water cards, alerts, Analytics insights and Excel export all use this, so
-// they cannot disagree. When Cloud Functions send alerts, move this to shared code.
+// they cannot disagree. The Cloud Functions compile this same file (functions/tsconfig.json), so
+// keep it free of app-only imports (React Native, Expo, @/ paths) - as alerts.ts and format.ts.
 //
 // Water type: fresh / tap water (decided 4 Nov 2026). pH 6.5-8.5 is the usual drinking-water
 // guideline range; temperature has no safety limit, so its range only flags unusual water.

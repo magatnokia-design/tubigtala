@@ -57,13 +57,14 @@ float readModuleMv(uint8_t pin, float dividerRatio) {
   return moduleMv;
 }
 
-// Two-point linear fit through the pH 7 and pH 4 buffer voltages - the same formula as
-// mobile/src/domain/calibration.ts phFromMv(). Uses the app's calibration when there is one.
+// Two-point linear fit through (ph7Mv, ph7Buffer) and (ph4Mv, ph4Buffer), using the buffers'
+// true pH (e.g. 6.86 / 4.01) - the same formula as mobile/src/domain/calibration.ts phFromMv().
+// Uses the app's calibration when there is one.
 float phFromMv(float mv) {
   if (isnan(mv)) return NAN;
   const PhCalibration& cal = cloudCalibration();
-  float slope = (7.0f - 4.0f) / (cal.ph7Mv - cal.ph4Mv);
-  float ph = 7.0f + (mv - cal.ph7Mv) * slope;
+  float slope = (cal.ph7Buffer - cal.ph4Buffer) / (cal.ph7Mv - cal.ph4Mv);
+  float ph = cal.ph7Buffer + (mv - cal.ph7Mv) * slope;
   if (ph < PH_MIN || ph > PH_MAX) return NAN;
   return ph;
 }
@@ -158,8 +159,8 @@ void printDiag() {
   }
   Serial.printf("Queue:  %u reading(s) waiting to upload\n", (unsigned)cloudPending());
   const PhCalibration& cal = cloudCalibration();
-  Serial.printf("pH cal: %s (pH 7 = %.0f mV, pH 4 = %.0f mV)\n", cal.calibrated ? "from the app" : "NOMINAL - not calibrated",
-                cal.ph7Mv, cal.ph4Mv);
+  Serial.printf("pH cal: %s (pH %.2f = %.0f mV, pH %.2f = %.0f mV)\n", cal.calibrated ? "from the app" : "NOMINAL - not calibrated",
+                cal.ph7Buffer, cal.ph7Mv, cal.ph4Buffer, cal.ph4Mv);
 
   ds18b20.begin();  // search the bus again, so a probe connected after boot is found
   int count = ds18b20.getDeviceCount();

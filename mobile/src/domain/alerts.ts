@@ -1,4 +1,4 @@
-// When an alert is raised: one decision, used by the app now and by Cloud Functions later.
+// When an alert is raised: one decision, used by the app and by the Cloud Functions (functions/).
 // A condition raises one alert when it gets worse; a value bouncing across a limit does not
 // re-alert within the cooldown unless it gets worse than what was already alerted.
 import { formatNumber } from './format.ts';
@@ -26,6 +26,27 @@ export function shouldAlert(state: AlertState | null, next: Level, nowMs: number
     return false; // already alerted at this level or worse, recently: a bounce, not news
   }
   return true;
+}
+
+/**
+ * What a new status means for users/{uid}/alertState: nothing changed, the level changed
+ * (update the record only), or raise an alert. Used by the app (services/alerts.ts) and the
+ * Cloud Function (functions/src/readings.ts) inside their transactions, so both decide the same.
+ * `state` in an update/raise is what to store; for a raise, alertedAtMs is `nowMs`.
+ */
+export type AlertStep =
+  | { kind: 'none' }
+  | { kind: 'update'; state: AlertState }
+  | { kind: 'raise'; state: AlertState };
+
+export function nextAlertStep(state: AlertState | null, next: Level, nowMs: number): AlertStep {
+  if (next === 'unknown') return { kind: 'none' }; // a missing value says nothing about the water
+  if (shouldAlert(state, next, nowMs)) {
+    const level = next as 'warning' | 'critical';
+    return { kind: 'raise', state: { level, alertLevel: level, alertedAtMs: nowMs } };
+  }
+  if (state?.level === next) return { kind: 'none' }; // nothing changed: no write
+  return { kind: 'update', state: { level: next, alertLevel: state?.alertLevel ?? null, alertedAtMs: state?.alertedAtMs ?? null } };
 }
 
 // How each field is named in an alert: in the title ("Tank 2: water too hot") and at the

@@ -17,9 +17,12 @@ Commands are PowerShell, run from the repo root `C:\App\TubigTala` unless stated
 Install packages:
 
 ```powershell
-cd devtools; npm install; cd ..
-cd mobile;   npm install; cd ..
+cd devtools;  npm install; cd ..
+cd mobile;    npm install; cd ..
+cd functions; npm install; npm run build; cd ..
 ```
+
+The emulators also load the Cloud Functions from `functions\lib\`, so build them once (and again after changing `functions\src` or the shared `mobile\src\domain` files). Without a build the other emulators still run; the functions emulator reports an error and readings raise alerts only in the open app.
 
 ## Run the app against simulated data
 
@@ -75,8 +78,23 @@ The APK always uses the **real** project: an installed app cannot reach the emul
 ## Tests
 
 ```powershell
-cd devtools; npm run test:rules     # Firestore Security Rules (starts and stops its own emulator)
-cd mobile;   npm test               # status / formatting logic
+cd devtools;  npm run test:rules     # Firestore Security Rules (starts and stops its own emulator)
+cd mobile;    npm test               # status / formatting / alert logic
+cd functions; npm test               # SMS/email policy: caps, streak, message text
+cd functions; npm run test:e2e       # builds, starts auth+firestore+functions emulators, uploads readings, checks alerts/email/SMS records
+```
+
+## Cloud Functions (alert backend)
+
+`functions\` holds the backend that raises alerts and sends email/SMS for every uploaded reading (`onReadingCreated`, region `asia-southeast1`; policy in `docs/data-model.md`, "Alert policy"). It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
+
+Status (4 Nov 2026): runs on the emulator only. Deploying needs the Blaze plan. SMS and email go to **log providers** that print what would be sent (recipients masked) and send nothing; real TextBee/Brevo senders, push, and offline checks are not built yet.
+
+**Deploy caution.** Now that `firebase.json` has a `functions` section, a plain `firebase deploy` also tries to deploy functions (and fails on Spark). Deploy rules on their own:
+
+```powershell
+firebase use                                # must print tubigtala-64d9e
+firebase deploy --only firestore:rules
 ```
 
 ## Firmware (compile only, no board needed)

@@ -87,6 +87,13 @@ test('calibration voltage out of range is rejected', () => assertFails(setCal('o
 test('client-chosen calibration time is rejected', () =>
   assertFails(setCal('owner', calibration({ calibratedAt: Timestamp.fromMillis(0) }))));
 test('extra calibration field is rejected', () => assertFails(setCal('owner', calibration({ slope: 3 }))));
+test('true buffer values (6.86 / 4.01 kit) are accepted', () =>
+  assertSucceeds(setCal('owner', calibration({ ph7BufferPh: 6.86, ph4BufferPh: 4.01 }))));
+test('buffer values outside 6.5-7.5 / 3.5-4.5 are rejected', async () => {
+  await assertFails(setCal('owner', calibration({ ph7BufferPh: 9.18, ph4BufferPh: 4.01 })));
+  await assertFails(setCal('owner', calibration({ ph7BufferPh: 6.86, ph4BufferPh: 6.86 })));
+  await assertFails(setCal('owner', calibration({ ph7BufferPh: '6.86' })));
+});
 test('owner still cannot change other device fields with a calibration', () =>
   assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { phCalibration: calibration(), deviceUid: 'owner' })));
 
@@ -218,4 +225,17 @@ test('alert state must be well-formed', async () => {
   await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ updatedAt: Timestamp.fromMillis(0) })));
   await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ extra: true })));
   await assertFails(setDoc(doc(as('owner'), stateDoc('owner', `${DEVICE}_salinity`)), alertState()));
+});
+
+// --- server-only records (Cloud Functions, firebase-admin bypasses rules) ---
+test('alertDeliveries and smsBudget are closed to every app account, even the owner', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'alertDeliveries/sms_owner_dev-1_ph_1'), { channel: 'sms', uid: 'owner', deviceId: DEVICE, status: 'sent' });
+    await setDoc(doc(ctx.firestore(), 'smsBudget/global'), { day: '2026-11-04', dayCount: 1, month: '2026-11', monthCount: 1 });
+  });
+  await assertFails(getDoc(doc(as('owner'), 'alertDeliveries/sms_owner_dev-1_ph_1')));
+  await assertFails(getDocs(query(collection(as('owner'), 'alertDeliveries'), where('uid', '==', 'owner'))));
+  await assertFails(setDoc(doc(as('owner'), 'alertDeliveries/sms_owner_dev-1_ph_2'), { channel: 'sms', uid: 'owner' }));
+  await assertFails(getDoc(doc(as('owner'), 'smsBudget/global')));
+  await assertFails(setDoc(doc(as('owner'), 'smsBudget/global'), { day: '2026-11-04', dayCount: 0, month: '2026-11', monthCount: 0 }));
 });

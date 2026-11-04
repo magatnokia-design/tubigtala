@@ -107,9 +107,14 @@ service cloud.firestore {
       // Two-point pH calibration saved by the app's calibration screen. "calibrated" needs both
       // buffer voltages (module output, mV), 100-1500 mV apart in either direction - the same rule
       // as the app (domain/calibration.ts) and the firmware (cloud.cpp) - stamped with server time.
+      // The buffers' true pH (e.g. 6.86 / 4.01) is optional; missing means 7.00 / 4.00.
+      function validBuffer(c, key, lo, hi) {
+        return !(key in c) || ((c[key] is int || c[key] is float) && c[key] >= lo && c[key] <= hi);
+      }
+
       function validCalibration(c) {
         return c is map
-          && c.keys().hasOnly(['status', 'calibratedAt', 'method', 'ph7Mv', 'ph4Mv'])
+          && c.keys().hasOnly(['status', 'calibratedAt', 'method', 'ph7Mv', 'ph4Mv', 'ph7BufferPh', 'ph4BufferPh'])
           && (
             (c.status == 'uncalibrated' && c.calibratedAt == null)
             || (c.status == 'calibrated'
@@ -118,6 +123,8 @@ service cloud.firestore {
                 && (c.ph4Mv is int || c.ph4Mv is float) && c.ph4Mv >= 0 && c.ph4Mv <= 5500
                 && differs(c.ph7Mv, c.ph4Mv, 100)
                 && c.ph7Mv - c.ph4Mv <= 1500 && c.ph4Mv - c.ph7Mv <= 1500
+                && validBuffer(c, 'ph7BufferPh', 6.5, 7.5)
+                && validBuffer(c, 'ph4BufferPh', 3.5, 4.5)
                 && c.calibratedAt == request.time
                 && c.method is string && c.method.size() <= 80)
           );

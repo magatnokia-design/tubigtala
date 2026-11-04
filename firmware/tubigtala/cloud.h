@@ -16,11 +16,16 @@ struct Reading {
   float nh3GasMv;
 };
 
-/** pH two-point calibration: the probe voltages in pH 7 and pH 4 buffers (module output, mV). */
+/**
+ * pH two-point calibration: the probe voltages (module output, mV) in a neutral and an acid
+ * buffer, and those buffers' true pH (e.g. 6.86 / 4.01; 7.00 / 4.00 when the record has none).
+ */
 struct PhCalibration {
   bool calibrated;
   float ph7Mv;
   float ph4Mv;
+  float ph7Buffer;
+  float ph4Buffer;
 };
 
 void cloudBegin(const char* bootId);
