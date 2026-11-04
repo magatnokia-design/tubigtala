@@ -14,7 +14,14 @@ devices/{deviceId}                           one monitoring unit (ESP32 + probes
 devices/{deviceId}/readings/{readingId}      one sample from that unit
 ```
 
-Planned, not built yet: `alertRules`, `alertEvents` (step 6, needs Cloud Functions / Blaze).
+Server-only (written by Cloud Functions with firebase-admin; no app account can read or write them, tested in `devtools/rules.test.mjs`):
+
+```
+alertDeliveries/{id}   one email or SMS: email_{uid}_{deviceId}_{readingId} or sms_{uid}_{deviceId}_{metric}_{alertedAtMs}
+smsBudget/global       SMS counted per Philippine day and month, for the caps
+```
+
+`alertDeliveries` fields: `channel` (`email`/`sms`), `uid`, `deviceId`, `readingId`, `metric` (SMS), `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
 
 ### `users/{uid}`
 
@@ -62,9 +69,9 @@ Water type: **fresh / tap water** (decided 4 Nov 2026). `mobile/src/domain/thres
 
 pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no safety limit for tap water; its range only flags unusual water. **Ammonia gas ranges are placeholders** until the real sensor's baseline is measured in clean air above clean water. Status words are plain on purpose ("too high", not "too basic").
 
-### Alert policy for SMS and email (planned, needs Blaze + Cloud Functions)
+### Alert policy for SMS and email
 
-Decided 4 Nov 2026; not built yet. Today only in-app/push alerts exist, raised while the app is open. The board never sends alerts; a Cloud Function evaluates each uploaded reading. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+Decided 4 Nov 2026. **Built for reading alerts in `functions/` and tested on the emulator; not deployed** (needs Blaze), and SMS/email go to log-only providers until TextBee/Brevo are added. Not built yet: push from the server (the app does not store push tokens yet), the offline / sensor-not-reading checks, the "SMS limit reached" notice in the app, and an email on/off switch (the server treats a missing `emailAlertsEnabled` as on). The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
 
 | Event | Push | Email | SMS |
 |---|---|---|---|

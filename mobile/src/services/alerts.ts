@@ -4,7 +4,7 @@
 // and a failed write changes nothing - the next reading simply tries again.
 import { doc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
 
-import { alertText, shouldAlert, type AlertState } from '@/domain/alerts';
+import { alertText, nextAlertStep, type AlertState } from '@/domain/alerts';
 import type { Metric, Status } from '@/domain/thresholds';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
@@ -23,11 +23,11 @@ export async function evaluateAlert(uid: string, device: Device, reading: Readin
       alertedAtMs: d.alertedAt instanceof Timestamp ? d.alertedAt.toMillis() : null,
     };
     // Server time of the reading, so the cooldown does not depend on the phone's clock.
-    const alert = shouldAlert(state, status.level, reading.serverTimeMs);
-    if (!alert && state?.level === status.level) return null; // nothing changed: no write
+    const step = nextAlertStep(state, status.level, reading.serverTimeMs);
+    if (step.kind === 'none') return null;
 
-    if (alert) {
-      const level = status.level as 'warning' | 'critical';
+    if (step.kind === 'raise') {
+      const level = step.state.alertLevel as 'warning' | 'critical';
       const text = alertText(metric, status.label, reading[metric], device.name, {
         simulated: device.simulated,
         uncalibrated: metric === 'ph' && !reading.phCalibrated,
@@ -48,9 +48,9 @@ export async function evaluateAlert(uid: string, device: Device, reading: Readin
     }
 
     tx.set(stateRef, {
-      level: status.level,
-      alertLevel: state?.alertLevel ?? null,
-      alertedAt: state?.alertedAtMs ? Timestamp.fromMillis(state.alertedAtMs) : null,
+      level: step.state.level,
+      alertLevel: step.state.alertLevel,
+      alertedAt: step.state.alertedAtMs ? Timestamp.fromMillis(step.state.alertedAtMs) : null,
       updatedAt: serverTimestamp(),
     });
     return null;

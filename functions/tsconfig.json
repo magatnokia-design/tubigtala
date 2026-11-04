@@ -1,0 +1,21 @@
+{
+  // Compiles this package together with the app's shared domain rules
+  // (mobile/src/domain/{thresholds,alerts,format}.ts), so the server classifies readings and
+  // words alerts with the very same code as the app - nothing is copied, nothing can drift.
+  // rootDir is the repo root, so the output is lib/functions/src/*.js and lib/mobile/src/domain/*.js,
+  // all inside this package (Firebase deploys only this folder).
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rewriteRelativeImportExtensions": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": "..",
+    "outDir": "lib",
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.e2e.ts"]
+}
