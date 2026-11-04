@@ -69,14 +69,51 @@ arduino-cli monitor -p COM5 -c baudrate=115200
 Expected, in order:
 
 ```
-TubigTala 0.2.0 boot 1a2b3c4d, DS18B20 count 1, pH UNCALIBRATED
+TubigTala 0.2.1 boot 1a2b3c4d, DS18B20 count 1, pH UNCALIBRATED
 Device tank-01, Wi-Fi "YourWifi", uploading to tubigtala-64d9e
+Type help for commands
 READING {"bootId":"1a2b3c4d","seq":0,...}
 [cloud] signed in
 [cloud] saved #0 (0 waiting)
 ```
 
 Then the reading appears in the app's Water tab within a few seconds. Next, calibrate pH from the app (`docs/wiring.md`, Calibration); serial shows `[cloud] pH calibration applied` within 10 minutes.
+
+### Serial commands (firmware 0.2.1+)
+
+Type into the monitor and press Enter (Arduino IDE Serial Monitor: set the line ending to "Newline"). They only read and print, except `read`. Readings and uploads keep running meanwhile. Use these instead of re-flashing to check wiring.
+
+| Command | What it does |
+|---|---|
+| `help` | Lists the commands. |
+| `diag` | One report: Wi-Fi (signal in dBm), clock, upload queue, pH calibration in use, DS18B20 (temperature, or why not), G34 and G35 (pin mV, board output mV, pH estimate). |
+| `read` | Takes a normal reading now (it is uploaded like any other) and restarts the 1-minute timer. |
+| `pins` | Prints G34 (pH) and G35 (gas) every second for 30 s. Use it while turning the pH board's trimmer. `stop` ends it early. |
+
+Example `diag` (values illustrative, not measured):
+
+```
+--- diag: TubigTala 0.2.1, boot 1a2b3c4d, up 95 s
+Wi-Fi:  connected to "YourWifi", signal -58 dBm, IP 192.168.1.40
+Clock:  2026-11-04 15:42:10 (UTC+8)
+Queue:  0 reading(s) waiting to upload
+pH cal: NOMINAL - not calibrated (pH 7 = 2500 mV, pH 4 = 3040 mV)
+Temp:   27.44 C (1 probe(s) found)
+pH:     G34 pin 1502 mV -> board 2503 mV -> pH 6.98 (uncalibrated)
+Gas:    G35 pin  410 mV -> board  683 mV (heater warming up, 85 s left)
+---
+```
+
+What the lines tell you:
+
+| You see | Meaning |
+|---|---|
+| `DS18B20 NOT FOUND` | Probe not wired: DAT->G4, VCC->3V3, GND, or a loose wire in the green screw terminal. |
+| `85.00 C is the power-on value` | Normal right after power-on; run `diag` again. |
+| G34 pin about 1500 mV in pH 7 buffer (board about 2500 mV) | pH board and divider are right (the 2.5 V offset set with the trimmer, x 0.6). |
+| `CLIPPED` on G34 or G35 | Pin is near 3.3 V: divider missing, swapped (15k on top), or a board output above 5 V. Unplug and check before going on. |
+| G34 or G35 near 0 mV | Signal wire not connected, or the board has no power (V+/VCC -> V5, G/GND -> GND). |
+| Wi-Fi signal below about -80 dBm | Weak; uploads may fail. Move the board or the router closer. |
 
 ## Troubleshooting
 
