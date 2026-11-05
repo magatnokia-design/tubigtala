@@ -8,6 +8,7 @@ import {
 import { calibrationMethod, DEFAULT_BUFFERS, type Buffers } from '@/domain/calibration';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
+import { emptyBecauseOffline } from '@/services/offline';
 
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const millisOrNull = (v: unknown): number | null => (v instanceof Timestamp ? v.toMillis() : null);
@@ -56,14 +57,22 @@ export function subscribeOwnedDevices(
 ): Unsubscribe {
   // The ownerUid filter is required: the rules deny any device query without it.
   const q = query(collection(db, 'devices'), where('ownerUid', '==', uid));
-  return onSnapshot(q, (snap) => onData(snap.docs.map(toDevice).sort((a, b) => a.name.localeCompare(b.name))), onError);
+  return onSnapshot(q, (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(snap.docs.map(toDevice).sort((a, b) => a.name.localeCompare(b.name)));
+  }, onError);
 }
 
 export function subscribeLatestReading(
   deviceId: string, onData: (reading: Reading | null) => void, onError: (e: FirestoreError) => void,
 ): Unsubscribe {
   const q = query(readingsOf(deviceId), orderBy('serverTime', 'desc'), limit(1));
-  return onSnapshot(q, (snap) => onData(snap.docs.length ? toReading(snap.docs[0]) : null), onError);
+  return onSnapshot(q, (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(snap.docs.length ? toReading(snap.docs[0]) : null);
+  }, onError);
 }
 
 /**
@@ -88,10 +97,14 @@ export function subscribeReadingsSince(
   );
   return onSnapshot(
     q,
-    (snap) => onData({
-      readings: snap.docs.map(toReading).filter((r): r is Reading => r !== null).reverse(),
-      truncated: snap.size >= HISTORY_LIMIT,
-    }),
+    (snap) => {
+      const offline = emptyBecauseOffline(snap);
+      if (offline) return onError(offline);
+      onData({
+        readings: snap.docs.map(toReading).filter((r): r is Reading => r !== null).reverse(),
+        truncated: snap.size >= HISTORY_LIMIT,
+      });
+    },
     onError,
   );
 }
@@ -133,7 +146,11 @@ export function subscribeReadingsBetween(
   deviceId: string, startMs: number, endMs: number,
   onData: (result: { readings: Reading[]; truncated: boolean }) => void, onError: (e: FirestoreError) => void,
 ): Unsubscribe {
-  return onSnapshot(betweenQuery(deviceId, startMs, endMs), (snap) => onData(toResult(snap.docs)), onError);
+  return onSnapshot(betweenQuery(deviceId, startMs, endMs), (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(toResult(snap.docs));
+  }, onError);
 }
 
 /** One-off fetch for exports. */

@@ -98,11 +98,7 @@ export default function SettingsScreen() {
       <TabHeader title="Settings" />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <Section title="Account">
-          <Pressable
-            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'name' } })}
-            accessibilityRole="button"
-            accessibilityLabel="Edit name"
-            style={({ pressed }) => [styles.account, pressed && { backgroundColor: theme.backgroundElement }]}>
+          <View style={styles.account}>
             <View style={[styles.avatar, { backgroundColor: theme.tint }]}>
               <ThemedText style={[styles.avatarText, { color: theme.onTint }]}>{initials}</ThemedText>
             </View>
@@ -110,8 +106,15 @@ export default function SettingsScreen() {
               <ThemedText type="smallBold" style={styles.name} numberOfLines={1}>{p.displayName}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="middle">{user.email ?? ''}</ThemedText>
             </View>
-            <Icon name="chevron_right" color="textSecondary" />
-          </Pressable>
+          </View>
+          {/* Shows the current value; editing starts only when the user taps Change. */}
+          <Row
+            icon="person"
+            label="Name"
+            value={p.displayName}
+            right={<ChangeLabel />}
+            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'name' } })}
+          />
         </Section>
 
         <Section title="SMS">
@@ -119,8 +122,8 @@ export default function SettingsScreen() {
             icon="phone_iphone"
             label="Mobile number"
             value={p.phoneE164 ? formatPhMobile(p.phoneE164) : 'Not set'}
+            right={<ChangeLabel />}
             onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'phone' } })}
-            chevron
           />
           <Row
             icon="sms"
@@ -182,6 +185,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <View style={[styles.sectionBody, { borderColor: theme.border }]}>{children}</View>
     </View>
   );
+}
+
+function ChangeLabel() {
+  const theme = useTheme();
+  return <ThemedText type="smallBold" style={{ color: theme.tint }}>Change</ThemedText>;
 }
 
 function Row({ icon, label, value, right, onPress, chevron }: {

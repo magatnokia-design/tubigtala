@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 
 import type { AppNotification } from '@/domain/types';
 import { db } from '@/services/firebase';
+import { emptyBecauseOffline } from '@/services/offline';
 
 const inbox = (uid: string) => collection(db, 'users', uid, 'notifications');
 const METRICS = ['ph', 'temperatureC', 'nh3GasMv'] as const;
@@ -31,7 +32,11 @@ export function subscribeNotifications(
   uid: string, onData: (items: AppNotification[]) => void, onError: (e: FirestoreError) => void,
 ): Unsubscribe {
   const q = query(inbox(uid), orderBy('createdAt', 'desc'), limit(100));
-  return onSnapshot(q, (snap) => onData(snap.docs.map((s) => toNotification(s.id, s.data({ serverTimestamps: 'estimate' })))), onError);
+  return onSnapshot(q, (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(snap.docs.map((s) => toNotification(s.id, s.data({ serverTimestamps: 'estimate' }))));
+  }, onError);
 }
 
 /** Alerts for one device in a time range (exports). Filtered by device here to avoid a composite index. */
