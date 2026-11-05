@@ -13,6 +13,7 @@ import { OfflineBanner } from '@/components/offline-banner';
 import { ScaleBar } from '@/components/scale-bar';
 import { StatusPill } from '@/components/status-pill';
 import { ThemedText } from '@/components/themed-text';
+import { METRIC_ICON } from '@/constants/metric-icons';
 import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { formatAge, formatNumber } from '@/domain/format';
 import { STATION_NAME } from '@/domain/pairing';
@@ -82,7 +83,7 @@ export default function WaterScreen() {
         )}
 
         <MetricCard
-          icon="water_ph"
+          icon={METRIC_ICON.ph}
           label="pH level"
           value={formatNumber(reading?.ph ?? null, 1)}
           status={ph}
@@ -99,7 +100,7 @@ export default function WaterScreen() {
         </MetricCard>
 
         <MetricCard
-          icon="device_thermostat"
+          icon={METRIC_ICON.temperatureC}
           label="Temperature"
           value={formatNumber(reading?.temperatureC ?? null, 1)}
           unit="°C"
@@ -117,7 +118,7 @@ export default function WaterScreen() {
         </MetricCard>
 
         <MetricCard
-          icon="air"
+          icon={METRIC_ICON.nh3GasMv}
           label="Ammonia gas"
           value={formatNumber(reading?.nh3GasMv ?? null, 0)}
           unit="mV"

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { formatNationalInput, formatPhMobile, normalizePhMobile } from './phone.ts';
-import { confirmPasswordError, emailError, nameError, newPasswordError, phoneError } from './validation.ts';
+import { changedPasswordError, confirmPasswordError, emailError, nameError, newPasswordError, phoneError } from './validation.ts';
 
 test('PH mobile numbers in the shapes people type', () => {
   for (const input of ['09001234567', '9001234567', '+639001234567', '639001234567', '0900 123 4567', '+63 900-123-4567', '(0900) 123 4567']) {
@@ -53,4 +53,11 @@ test('passwords', () => {
   assert.ok(confirmPasswordError('tubig2026', ''));
   assert.ok(confirmPasswordError('tubig2026', 'tubig2025'));
   assert.equal(confirmPasswordError('tubig2026', 'tubig2026'), undefined);
+});
+
+test('change password: same rules as sign-up, and must differ from the current one', () => {
+  assert.equal(changedPasswordError('oldpass12', 'newpass34'), undefined);
+  assert.ok(changedPasswordError('oldpass12', 'short1'), 'too short');
+  assert.ok(changedPasswordError('oldpass12', 'onlyletters'), 'needs a number');
+  assert.match(changedPasswordError('samepass12', 'samepass12')!, /different/);
 });

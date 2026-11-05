@@ -14,6 +14,7 @@ import { Notice } from '@/components/notice';
 import { OfflineBanner } from '@/components/offline-banner';
 import { StatusPill } from '@/components/status-pill';
 import { ThemedText } from '@/components/themed-text';
+import { METRIC_ICON } from '@/constants/metric-icons';
 import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { endOfDay, formatRange, startOfDay, type DayRange } from '@/domain/dates';
 import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
@@ -28,9 +29,9 @@ import { HISTORY_LIMIT } from '@/services/devices';
 
 // Order requested: pH level, temperature, ammonia.
 const METRICS: { metric: Metric; icon: AndroidSymbol }[] = [
-  { metric: 'ph', icon: 'water_ph' },
-  { metric: 'temperatureC', icon: 'device_thermostat' },
-  { metric: 'nh3GasMv', icon: 'air' },
+  { metric: 'ph', icon: METRIC_ICON.ph },
+  { metric: 'temperatureC', icon: METRIC_ICON.temperatureC },
+  { metric: 'nh3GasMv', icon: METRIC_ICON.nh3GasMv },
 ];
 
 const LIVE_WINDOW_MS = 3_600_000;

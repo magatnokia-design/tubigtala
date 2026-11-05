@@ -59,6 +59,21 @@ const SUBJECT: Record<Metric, { title: string; sentence: string }> = {
 };
 
 /**
+ * What is wrong, without the station name - for the in-app list and details, where the station is
+ * shown separately (only when there is more than one): "Water a bit warm", "pH too high".
+ */
+export function alertHeadline(metric: Metric, label: string): string {
+  const text = `${SUBJECT[metric].title} ${label.toLowerCase()}`;
+  return metric === 'ph' ? text : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The reading and its normal range in one line: "33.4 °C · normal 20 to 32 °C". */
+export function alertDetail(metric: Metric, value: number | null): string {
+  const info = METRIC_INFO[metric];
+  return `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''} · normal ${normalRangeText(metric)}`;
+}
+
+/**
  * Title and body of an alert, written so the title alone says what is wrong:
  * "Tank 1: pH too high" / "pH is 9.4. Normal is 6.5 to 8.5."
  * Caveats come last: uncalibrated pH (CLAUDE.md: never assume calibration) and simulated data.

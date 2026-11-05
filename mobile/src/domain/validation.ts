@@ -35,6 +35,11 @@ export function newPasswordError(password: string): string | undefined {
   return undefined;
 }
 
+/** Change password: the new one follows the sign-up rules and must differ from the current one. */
+export function changedPasswordError(current: string, next: string): string | undefined {
+  return newPasswordError(next) ?? (next === current ? 'Use a password different from your current one.' : undefined);
+}
+
 export function confirmPasswordError(password: string, confirm: string): string | undefined {
   if (!confirm) return 'Re-enter your password.';
   if (confirm !== password) return 'Passwords do not match.';
