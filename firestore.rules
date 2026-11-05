@@ -96,10 +96,6 @@ service cloud.firestore {
       allow read: if signedIn()
         && (resource.data.ownerUid == request.auth.uid || resource.data.deviceUid == request.auth.uid);
 
-      function validName(n) {
-        return n is string && n.trim().size() >= 1 && n.size() <= 40;
-      }
-
       function differs(a, b, by) {
         return a - b >= by || b - a >= by;
       }
@@ -130,14 +126,33 @@ service cloud.firestore {
           );
       }
 
-      // Devices are provisioned by an admin (Firebase console). The owner may rename the device
-      // and save or reset its pH calibration - nothing else.
+      // Devices (TubigTala Stations) are provisioned by an admin with ownerUid null and a pairing
+      // code in devicePairing/{deviceId} (docs/device-setup.md). The name is fixed by the admin.
+
+      // The owner may save or reset its pH calibration - nothing else.
       allow update: if signedIn()
         && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phCalibration'])
-        && validName(request.resource.data.name)
-        && (!('phCalibration' in request.resource.data.diff(resource.data).affectedKeys())
-            || validCalibration(request.resource.data.phCalibration));
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phCalibration'])
+        && validCalibration(request.resource.data.phCalibration);
+
+      // Pair: a signed-in user who has the code from the station's QR sticker takes a station that
+      // has no owner. The code is checked against devicePairing, which no client can read.
+      allow update: if signedIn()
+        && resource.data.ownerUid == null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'pairCode', 'pairedAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.pairedAt == request.time
+        && exists(/databases/$(database)/documents/devicePairing/$(deviceId))
+        && request.resource.data.pairCode == get(/databases/$(database)/documents/devicePairing/$(deviceId)).data.code;
+
+      // Remove: the owner releases the station; it can be paired again with the same sticker.
+      // Its readings stay with the station (a new owner sees them - accepted for the prototype).
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'pairCode', 'pairedAt'])
+        && request.resource.data.ownerUid == null
+        && request.resource.data.pairedAt == null
+        && !('pairCode' in request.resource.data);
 
       match /readings/{readingId} {
         function device() {

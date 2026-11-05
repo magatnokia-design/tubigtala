@@ -13,23 +13,36 @@ Each board signs in as its own Firebase Auth account. That account can only writ
    - Email: `tank-01@devices.tubigtala.app` (any address; it never receives mail)
    - Password: a long random one (e.g. from a password manager)
 3. Copy the new user's **User UID**. This is the *device* UID.
-4. In the same list, find **your own** account (the one you sign in to the app with) and copy its User UID. This is the *owner* UID.
 
-## 2. Create the device record (Firestore console)
+## 2. Create the station record (Firestore console)
+
+The board is a **TubigTala Station**; `tank-01` is its ID, used only behind the scenes and on its sticker. It starts with **no owner**: whoever scans its QR sticker in the app pairs it (step 2b).
 
 Firestore Database > **Data** > `devices` collection (Start collection if missing) > **Add document**, Document ID `tank-01`, fields:
 
 | Field | Type | Value |
 |---|---|---|
-| `name` | string | `Tank 1` (shown in the app; you can rename later) |
-| `ownerUid` | string | your owner UID from step 1.4 |
+| `name` | string | `TubigTala Station` (fixed; the app cannot rename it) |
+| `ownerUid` | **null** | must be present and null - the rules only let a station with `ownerUid` null be paired |
 | `deviceUid` | string | the device UID from step 1.3 |
 | `simulated` | boolean | `false` |
 | `readingIntervalSec` | number | `60` (must match `READING_INTERVAL_MS` in `config.h`) |
 | `phCalibration` | map | `status` (string) `uncalibrated`, `calibratedAt` (null), `method` (null) - the app fills in the rest when you calibrate |
 | `createdAt` | timestamp | now |
 
-The device now appears in the app as "No readings yet" until the board sends its first reading.
+## 2b. Pairing code and QR sticker
+
+```powershell
+cd devtools; npm run pair-code -- tank-01; cd ..
+```
+
+It prints a new random pairing code (e.g. `ABCD-EFGH-JKMN`) and writes `devtools\out\station-tank-01.html` (git-ignored - it holds the secret code).
+
+1. Firestore console > **Start collection** `devicePairing` > Document ID `tank-01` > field `code` (string) = the code **without dashes**, as printed by the script. No app account can read this collection; the rules compare against it when someone pairs.
+2. Open the HTML file in a browser, print it, and stick the label on the station's case. It shows the QR plus the ID and code for typing by hand.
+3. App: **Settings > Add TubigTala Station** (or the button on the Water tab) > **Scan QR code**, or **Type the code**. The station then shows as "No readings yet" until the board sends its first reading.
+
+**Remove station** (Settings) releases it: it disappears from that account and can be paired again with the same sticker. Its readings stay with the station, so a new owner sees the old history (accepted for this one-person prototype). To make an old sticker useless, run `pair-code` again and replace `code` in `devicePairing/tank-01`.
 
 ## 3. Fill in secrets.h
 

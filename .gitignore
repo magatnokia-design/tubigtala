@@ -59,3 +59,6 @@ CLAUDE.md
 
 # Cloud Functions build output (rebuilt by "npm run build" and on deploy)
 functions/lib/
+
+# Pairing codes and QR stickers made by devtools/pair-code.mjs (secret until printed)
+devtools/out/

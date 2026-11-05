@@ -2,7 +2,7 @@
 import { test, before, beforeEach, after } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where,
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, query, where,
          serverTimestamp, Timestamp } from 'firebase/firestore';
 import { PROJECT_ID, FIRESTORE_HOST, FIRESTORE_PORT } from './emulator.mjs';
 
@@ -36,6 +36,12 @@ beforeEach(async () => {
       name: 'Not mine', ownerUid: 'someone-else', deviceUid: 'board-2', simulated: false, readingIntervalSec: 60,
     });
     await setDoc(doc(db, path('seed-0')), { ...reading({ bootId: 'seed', seq: 0 }), serverTime: Timestamp.now() });
+    // An unpaired station and its secret pairing code (docs/device-setup.md).
+    await setDoc(doc(db, 'devices/free'), {
+      name: 'TubigTala Station', ownerUid: null, deviceUid: 'board-3', simulated: false, readingIntervalSec: 60,
+    });
+    await setDoc(doc(db, 'devicePairing/free'), { code: 'ABCDEFGHJKMN' });
+    await setDoc(doc(db, 'devicePairing/other'), { code: 'OTHERCODE234' });
   });
 });
 
@@ -50,8 +56,43 @@ test('signed-out user cannot read device', () => assertFails(getDoc(doc(as(null)
 test('owner can list only own devices', () =>
   assertSucceeds(getDocs(query(collection(as('owner'), 'devices'), where('ownerUid', '==', 'owner')))));
 test('unfiltered device list is denied', () => assertFails(getDocs(collection(as('owner'), 'devices'))));
-test('owner can rename device', () => assertSucceeds(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { name: 'Pond' })));
-test('rename to blank is denied', () => assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { name: '   ' })));
+test('the station name is fixed: the owner cannot rename it', () =>
+  assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { name: 'Pond' })));
+
+// --- pairing (QR sticker) ---
+const pair = (uid, id = 'free', code = 'ABCDEFGHJKMN', extra = {}) =>
+  updateDoc(doc(as(uid), `devices/${id}`), { ownerUid: uid, pairCode: code, pairedAt: serverTimestamp(), ...extra });
+
+test('pair an unowned station with the right code, then read it', async () => {
+  await assertSucceeds(pair('maria'));
+  await assertSucceeds(getDoc(doc(as('maria'), 'devices/free')));
+});
+test('wrong pairing code is rejected', () => assertFails(pair('maria', 'free', 'ABCDEFGHJKMP')));
+test('a station that already has an owner cannot be taken, even with its code', () =>
+  assertFails(pair('maria', 'other', 'OTHERCODE234')));
+test('cannot pair a station for someone else', () =>
+  assertFails(updateDoc(doc(as('maria'), 'devices/free'), { ownerUid: 'juan', pairCode: 'ABCDEFGHJKMN', pairedAt: serverTimestamp() })));
+test('pairing cannot change anything else', () => assertFails(pair('maria', 'free', 'ABCDEFGHJKMN', { deviceUid: 'maria' })));
+test('pairing time must be the server time', () =>
+  assertFails(pair('maria', 'free', 'ABCDEFGHJKMN', { pairedAt: Timestamp.fromMillis(0) })));
+test('signed-out users cannot pair', () =>
+  assertFails(updateDoc(doc(as(null), 'devices/free'), { ownerUid: null, pairCode: 'ABCDEFGHJKMN' })));
+test('pairing codes cannot be read or written by any app account', async () => {
+  await assertFails(getDoc(doc(as('maria'), 'devicePairing/free')));
+  await assertFails(getDoc(doc(as('owner'), 'devicePairing/other')));
+  await assertFails(setDoc(doc(as('maria'), 'devicePairing/free'), { code: 'MYOWNCODE234' }));
+});
+test('owner can remove (unpair) the station; then only a code holder can pair it again', async () => {
+  await assertSucceeds(pair('maria'));
+  const unpair = (uid) => updateDoc(doc(as(uid), 'devices/free'), { ownerUid: null, pairedAt: null, pairCode: deleteField() });
+  await assertFails(unpair('juan'));
+  await assertSucceeds(unpair('maria'));
+  await assertFails(getDoc(doc(as('maria'), 'devices/free')));
+  await assertFails(pair('juan', 'free', 'WRONGCODE234'));
+  await assertSucceeds(pair('juan'));
+});
+test('removing must clear the pairing fields', () =>
+  assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { ownerUid: null, pairedAt: null, pairCode: 'ABCDEFGHJKMN' })));
 test('owner cannot reassign device', () =>
   assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { ownerUid: 'stranger' })));
 test('nobody can create devices from a client', () =>

@@ -23,6 +23,7 @@ export default function AppLayout() {
         <Stack.Screen name="edit-profile" options={{ title: 'Edit' }} />
         <Stack.Screen name="export" options={{ title: 'Export to Excel', presentation: 'modal' }} />
         <Stack.Screen name="calibrate-ph" options={{ title: 'Calibrate pH' }} />
+        <Stack.Screen name="pair-device" options={{ title: 'Add station' }} />
       </Stack>
     </SelectedDeviceProvider>
   );

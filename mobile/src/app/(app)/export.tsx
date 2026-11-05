@@ -58,7 +58,7 @@ export default function ExportScreen() {
     <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
       <View style={[styles.deviceRow, { backgroundColor: theme.backgroundElement }]}>
         <Icon name="sensors" />
-        <ThemedText type="smallBold" style={styles.flex} numberOfLines={1}>{device?.name ?? 'No device connected'}</ThemedText>
+        <ThemedText type="smallBold" style={styles.flex} numberOfLines={1}>{device?.name ?? 'No station connected'}</ThemedText>
         <Icon name="table_view" color="textSecondary" />
       </View>
 

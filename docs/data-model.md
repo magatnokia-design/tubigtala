@@ -19,6 +19,7 @@ Server-only (written by Cloud Functions with firebase-admin; no app account can 
 ```
 alertDeliveries/{id}   one email or SMS: email_{uid}_{deviceId}_{readingId} or sms_{uid}_{deviceId}_{metric}_{alertedAtMs}
 smsBudget/global       SMS counted per Philippine day and month, for the caps
+devicePairing/{deviceId}  { code }: the station's secret pairing code, set by an admin (devtools pair-code); only the rules read it
 ```
 
 `alertDeliveries` fields: `channel` (`email`/`sms`), `uid`, `deviceId`, `readingId`, `metric` (SMS), `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
@@ -88,15 +89,17 @@ SMS rules: one SMS per ongoing condition (same cooldown as above); conditions on
 
 | Field | Type | Meaning |
 |---|---|---|
-| `name` | string | Label shown in the app, e.g. "Tank 1". 1–40 characters. |
-| `ownerUid` | string | Firebase Auth uid of the user who may view this device. |
+| `name` | string | Product name shown in the app: `TubigTala Station`. Set when provisioned; the app cannot change it. |
+| `ownerUid` | string \| null | Firebase Auth uid of the user who may view this station; **null** = not paired (must be present). Set by pairing, cleared by Remove station. |
+| `pairCode` | string | Present while paired: the code the owner paired with (equal to `devicePairing/{deviceId}.code` at that time). Removed on unpair. |
+| `pairedAt` | timestamp \| null | Server time of pairing; null when not paired. |
 | `deviceUid` | string | Firebase Auth uid the ESP32 signs in as. Only this account may write readings. Never the same as `ownerUid`. |
 | `simulated` | boolean | `true` for the `devtools/` simulator. Readings from a simulated device must carry `simulated: true` (enforced by rules). |
 | `readingIntervalSec` | number | How often the device is expected to send a reading. Drives stale/offline status. Default 60. |
 | `phCalibration` | map | `{ status: "uncalibrated" \| "calibrated", calibratedAt: timestamp \| null, method: string \| null, ph7Mv?: number, ph4Mv?: number, ph7BufferPh?: number, ph4BufferPh?: number }`. Saved by the app's Calibrate pH screen (owner only; buffers 100–1500 mV apart; `calibratedAt` = server time). `ph7Mv`/`ph4Mv`: module output in the neutral / acid buffer, mV. `ph7BufferPh`/`ph4BufferPh`: those buffers' true pH, 6.5–7.5 and 3.5–4.5 (e.g. 6.86 / 4.01); absent in calibrations saved before 4 Nov 2026, which means 7.00 / 4.00. pH = `ph7BufferPh + (mV − ph7Mv) × (ph7BufferPh − ph4BufferPh) / (ph7Mv − ph4Mv)`, identical in `mobile/src/domain/calibration.ts` and the firmware. The board reads the record at start and every 10 min, applies it and keeps a copy in flash. The per-reading `phCalibrated` flag records which was in use; stored readings are not recalculated. |
 | `createdAt` | timestamp | Server time. |
 
-Clients cannot create or delete devices. They are provisioned by an admin (Firebase console, `docs/device-setup.md`; `devtools/` on the emulator). The owner may change only `name` and `phCalibration`. The board (its `deviceUid` account) may read its own device record, to pick up its calibration.
+Clients cannot create or delete devices. They are provisioned by an admin with `ownerUid: null` (Firebase console, `docs/device-setup.md`; `devtools/` on the emulator). **Pairing:** a signed-in user may set `ownerUid` to themselves, `pairedAt` to server time and `pairCode` to the code from the station's QR sticker - only while `ownerUid` is null and only if `pairCode` equals `devicePairing/{deviceId}.code` (format in `mobile/src/domain/pairing.ts`: 12 characters from an alphabet without 0/O/1/I/L; QR text `tubigtala:station?id=<id>&code=XXXX-XXXX-XXXX`). A wrong code, an unknown ID and a station someone else owns are indistinguishable to the app. **Remove:** the owner may set `ownerUid` and `pairedAt` to null and delete `pairCode`; readings stay with the station. Otherwise the owner may change only `phCalibration`. The board (its `deviceUid` account) may read its own device record, to pick up its calibration.
 
 ### `devices/{deviceId}/readings/{readingId}`
 

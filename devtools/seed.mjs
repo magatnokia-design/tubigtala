@@ -38,14 +38,18 @@ await db.doc(`users/${owner.uid}`).set({
 
 const deviceRef = db.doc(`devices/${DEMO_DEVICE.id}`);
 await deviceRef.set({
-  name: 'Simulated tank',
+  name: 'TubigTala Station',
   ownerUid: owner.uid,
   deviceUid: device.uid,
   simulated: true,
   readingIntervalSec: DEMO_DEVICE.readingIntervalSec,
   phCalibration: { status: 'uncalibrated', calibratedAt: null, method: null },
+  pairCode: DEMO_DEVICE.pairCode,
+  pairedAt: FieldValue.serverTimestamp(),
   createdAt: FieldValue.serverTimestamp(),
 });
+// Its pairing code, so "Remove station" and "Add station" can be tried in the app.
+await db.doc(`devicePairing/${DEMO_DEVICE.id}`).set({ code: DEMO_DEVICE.pairCode });
 
 // Backfill: one reading every 10 min for the past 24 h. Admin writes bypass the rules,
 // which is the only way to set past serverTime values. All are marked simulated.
@@ -70,4 +74,5 @@ await batch.commit();
 
 console.log(`Seeded device ${DEMO_DEVICE.id} with 144 backfilled readings.`);
 console.log(`Sign in to the app with ${DEMO_OWNER.email} / ${DEMO_OWNER.password}`);
+console.log(`To try pairing: remove the station in Settings, then Add station > Type the code: ID ${DEMO_DEVICE.id}, code ABCD-EFGH-2345.`);
 process.exit(0);

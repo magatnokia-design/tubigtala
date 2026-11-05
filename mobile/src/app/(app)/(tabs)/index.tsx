@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/button';
 import { DeviceSwitcher } from '@/components/device-switcher';
 import { Icon } from '@/components/icon';
 import { MetricCard, type Tag } from '@/components/metric-card';
@@ -14,6 +15,7 @@ import { StatusPill } from '@/components/status-pill';
 import { ThemedText } from '@/components/themed-text';
 import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { formatAge, formatNumber } from '@/domain/format';
+import { STATION_NAME } from '@/domain/pairing';
 import { deviceStatus } from '@/domain/status';
 import { classify, normalRangeText, RANGES } from '@/domain/thresholds';
 import { useLatestReading } from '@/hooks/use-devices';
@@ -67,13 +69,17 @@ export default function WaterScreen() {
           {loading ? (
             <ActivityIndicator color={theme.tint} />
           ) : (
-            <StatusPill status={status} label={device ? undefined : 'No device connected'} />
+            <StatusPill status={status} label={device ? undefined : 'No station connected'} />
           )}
           {device && <ThemedText type="smallBold" numberOfLines={1} style={styles.deviceName}>{device.name}</ThemedText>}
           {reading && <ThemedText type="small" themeColor="textSecondary">· {formatAge(now - reading.serverTimeMs)}</ThemedText>}
         </View>
 
         {loadError && <Notice tone="warning">{loadError}</Notice>}
+        {/* Only when the list really loaded empty - not offline, where it is unknown. */}
+        {devices.status === 'ready' && devices.data.length === 0 && (
+          <Button label={`Add ${STATION_NAME}`} icon="qr_code_scanner" onPress={() => router.push('/pair-device')} />
+        )}
 
         <MetricCard
           icon="water_ph"

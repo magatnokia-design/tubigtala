@@ -1,13 +1,15 @@
 // Firestore access for devices and readings (docs/data-model.md). Converts documents to the
 // app types and keeps null sensor values as null.
 import {
-  collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where,
+  collection, deleteField, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where,
   type DocumentData, type FirestoreError, type QueryDocumentSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 
 import { calibrationMethod, DEFAULT_BUFFERS, type Buffers } from '@/domain/calibration';
+import type { PairingInfo } from '@/domain/pairing';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
+import { emptyBecauseOffline } from '@/services/offline';
 
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const millisOrNull = (v: unknown): number | null => (v instanceof Timestamp ? v.toMillis() : null);
@@ -19,6 +21,7 @@ function toDevice(s: QueryDocumentSnapshot<DocumentData>): Device {
     name: typeof d.name === 'string' ? d.name : s.id,
     simulated: d.simulated === true,
     readingIntervalSec: typeof d.readingIntervalSec === 'number' && d.readingIntervalSec > 0 ? d.readingIntervalSec : 60,
+    pairedAtMs: millisOrNull(d.pairedAt),
     phCalibration: {
       status: d.phCalibration?.status === 'calibrated' ? 'calibrated' : 'uncalibrated',
       calibratedAtMs: millisOrNull(d.phCalibration?.calibratedAt),
@@ -56,14 +59,22 @@ export function subscribeOwnedDevices(
 ): Unsubscribe {
   // The ownerUid filter is required: the rules deny any device query without it.
   const q = query(collection(db, 'devices'), where('ownerUid', '==', uid));
-  return onSnapshot(q, (snap) => onData(snap.docs.map(toDevice).sort((a, b) => a.name.localeCompare(b.name))), onError);
+  return onSnapshot(q, (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(snap.docs.map(toDevice).sort((a, b) => a.name.localeCompare(b.name)));
+  }, onError);
 }
 
 export function subscribeLatestReading(
   deviceId: string, onData: (reading: Reading | null) => void, onError: (e: FirestoreError) => void,
 ): Unsubscribe {
   const q = query(readingsOf(deviceId), orderBy('serverTime', 'desc'), limit(1));
-  return onSnapshot(q, (snap) => onData(snap.docs.length ? toReading(snap.docs[0]) : null), onError);
+  return onSnapshot(q, (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(snap.docs.length ? toReading(snap.docs[0]) : null);
+  }, onError);
 }
 
 /**
@@ -88,10 +99,14 @@ export function subscribeReadingsSince(
   );
   return onSnapshot(
     q,
-    (snap) => onData({
-      readings: snap.docs.map(toReading).filter((r): r is Reading => r !== null).reverse(),
-      truncated: snap.size >= HISTORY_LIMIT,
-    }),
+    (snap) => {
+      const offline = emptyBecauseOffline(snap);
+      if (offline) return onError(offline);
+      onData({
+        readings: snap.docs.map(toReading).filter((r): r is Reading => r !== null).reverse(),
+        truncated: snap.size >= HISTORY_LIMIT,
+      });
+    },
     onError,
   );
 }
@@ -111,8 +126,18 @@ export function resetCalibration(deviceId: string): Promise<void> {
   return updateDoc(doc(db, 'devices', deviceId), { phCalibration: { status: 'uncalibrated', calibratedAt: null, method: null } });
 }
 
-export function renameDevice(deviceId: string, name: string): Promise<void> {
-  return updateDoc(doc(db, 'devices', deviceId), { name: name.trim() });
+/**
+ * Claims an unpaired station with the code from its QR sticker. The rules check the code;
+ * a wrong code, an unknown ID and a station someone else owns all look the same
+ * (permission-denied), on purpose: the app cannot learn which stations exist.
+ */
+export function pairDevice(uid: string, { deviceId, code }: PairingInfo): Promise<void> {
+  return updateDoc(doc(db, 'devices', deviceId), { ownerUid: uid, pairCode: code, pairedAt: serverTimestamp() });
+}
+
+/** Releases the station; it can be paired again with the same sticker. Its readings stay with it. */
+export function unpairDevice(deviceId: string): Promise<void> {
+  return updateDoc(doc(db, 'devices', deviceId), { ownerUid: null, pairedAt: null, pairCode: deleteField() });
 }
 
 const betweenQuery = (deviceId: string, startMs: number, endMs: number) => query(
@@ -133,7 +158,11 @@ export function subscribeReadingsBetween(
   deviceId: string, startMs: number, endMs: number,
   onData: (result: { readings: Reading[]; truncated: boolean }) => void, onError: (e: FirestoreError) => void,
 ): Unsubscribe {
-  return onSnapshot(betweenQuery(deviceId, startMs, endMs), (snap) => onData(toResult(snap.docs)), onError);
+  return onSnapshot(betweenQuery(deviceId, startMs, endMs), (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(toResult(snap.docs));
+  }, onError);
 }
 
 /** One-off fetch for exports. */
