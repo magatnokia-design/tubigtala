@@ -2,7 +2,7 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.2.3"
+#define FIRMWARE_VERSION "0.2.4"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V

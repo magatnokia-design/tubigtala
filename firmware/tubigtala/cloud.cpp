@@ -125,8 +125,16 @@ static bool signIn() {
     Serial.println("[cloud] signed in");
     return true;
   }
-  // Never print the password or tokens; the status and Firebase's error code are enough.
-  Serial.printf("[cloud] sign-in failed (HTTP %d) - check DEVICE_EMAIL/PASSWORD and FIREBASE_API_KEY\n", r.status);
+  // Never print the password or tokens; the status and Firebase's error code are enough, e.g.
+  // INVALID_LOGIN_CREDENTIALS (email or password), API_KEY_INVALID, or
+  // TOO_MANY_ATTEMPTS_TRY_LATER (temporary lock after repeated failures - wait, it clears).
+  StaticJsonDocument<64> filter;
+  filter["error"]["message"] = true;
+  StaticJsonDocument<192> err;
+  const char* code = !deserializeJson(err, r.body, DeserializationOption::Filter(filter)) && err["error"]["message"].is<const char*>()
+                         ? err["error"]["message"].as<const char*>()
+                         : "no error code";
+  Serial.printf("[cloud] sign-in failed (HTTP %d, %s) - check DEVICE_EMAIL/PASSWORD and FIREBASE_API_KEY\n", r.status, code);
   return false;
 }
 
