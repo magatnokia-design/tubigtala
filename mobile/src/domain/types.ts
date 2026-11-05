@@ -20,6 +20,8 @@ export interface Device {
   name: string;
   simulated: boolean;
   readingIntervalSec: number;
+  /** when this account paired the station (QR); null for stations assigned before pairing existed */
+  pairedAtMs: number | null;
   /** May be missing in data cached by an older app version - treat as uncalibrated. */
   phCalibration?: PhCalibration;
 }

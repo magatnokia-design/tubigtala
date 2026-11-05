@@ -1,11 +1,12 @@
 // Firestore access for devices and readings (docs/data-model.md). Converts documents to the
 // app types and keeps null sensor values as null.
 import {
-  collection, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where,
+  collection, deleteField, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, where,
   type DocumentData, type FirestoreError, type QueryDocumentSnapshot, type Unsubscribe,
 } from 'firebase/firestore';
 
 import { calibrationMethod, DEFAULT_BUFFERS, type Buffers } from '@/domain/calibration';
+import type { PairingInfo } from '@/domain/pairing';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
 import { emptyBecauseOffline } from '@/services/offline';
@@ -20,6 +21,7 @@ function toDevice(s: QueryDocumentSnapshot<DocumentData>): Device {
     name: typeof d.name === 'string' ? d.name : s.id,
     simulated: d.simulated === true,
     readingIntervalSec: typeof d.readingIntervalSec === 'number' && d.readingIntervalSec > 0 ? d.readingIntervalSec : 60,
+    pairedAtMs: millisOrNull(d.pairedAt),
     phCalibration: {
       status: d.phCalibration?.status === 'calibrated' ? 'calibrated' : 'uncalibrated',
       calibratedAtMs: millisOrNull(d.phCalibration?.calibratedAt),
@@ -124,8 +126,18 @@ export function resetCalibration(deviceId: string): Promise<void> {
   return updateDoc(doc(db, 'devices', deviceId), { phCalibration: { status: 'uncalibrated', calibratedAt: null, method: null } });
 }
 
-export function renameDevice(deviceId: string, name: string): Promise<void> {
-  return updateDoc(doc(db, 'devices', deviceId), { name: name.trim() });
+/**
+ * Claims an unpaired station with the code from its QR sticker. The rules check the code;
+ * a wrong code, an unknown ID and a station someone else owns all look the same
+ * (permission-denied), on purpose: the app cannot learn which stations exist.
+ */
+export function pairDevice(uid: string, { deviceId, code }: PairingInfo): Promise<void> {
+  return updateDoc(doc(db, 'devices', deviceId), { ownerUid: uid, pairCode: code, pairedAt: serverTimestamp() });
+}
+
+/** Releases the station; it can be paired again with the same sticker. Its readings stay with it. */
+export function unpairDevice(deviceId: string): Promise<void> {
+  return updateDoc(doc(db, 'devices', deviceId), { ownerUid: null, pairedAt: null, pairCode: deleteField() });
 }
 
 const betweenQuery = (deviceId: string, startMs: number, endMs: number) => query(

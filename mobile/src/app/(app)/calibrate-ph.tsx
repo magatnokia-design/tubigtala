@@ -113,7 +113,7 @@ export default function CalibratePhScreen() {
   }
 
   if (!device) {
-    return <View style={styles.pad}><Notice tone="warning">No device connected. Calibration needs a device sending readings.</Notice></View>;
+    return <View style={styles.pad}><Notice tone="warning">No station connected. Calibration needs a station sending readings.</Notice></View>;
   }
 
   const stepIndex = steps.findIndex((x) => x.key === step);

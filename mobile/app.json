@@ -32,6 +32,13 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 120
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TubigTala uses the camera only to scan the QR code on your TubigTala Station.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "experiments": {

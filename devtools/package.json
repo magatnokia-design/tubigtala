@@ -8,7 +8,8 @@
     "test:rules": "node firebase.mjs emulators:exec --only firestore --project demo-tubigtala \"node --test rules.test.mjs\"",
     "seed": "node seed.mjs",
     "simulate": "node simulate.mjs",
-    "assign": "node assign.mjs"
+    "assign": "node assign.mjs",
+    "pair-code": "node pair-code.mjs"
   },
   "dependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",

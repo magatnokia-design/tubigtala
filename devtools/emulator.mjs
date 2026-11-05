@@ -12,4 +12,6 @@ export const DEMO_DEVICE = {
   email: 'device-sim-01@tubigtala.test',
   password: 'device-pass-123',
   readingIntervalSec: 10,
+  // Emulator-only pairing code (type it as ABCD-EFGH-2345 on the Add station screen).
+  pairCode: 'ABCDEFGH2345',
 };

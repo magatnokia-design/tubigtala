@@ -123,7 +123,7 @@ export default function AnalyticsScreen() {
           {loading && <ActivityIndicator color={theme.tint} style={mode === 'date' ? styles.spinnerRight : undefined} />}
         </View>
 
-        {!device && !loading && <StatusPill status="no-data" label="No device connected" />}
+        {!device && !loading && <StatusPill status="no-data" label="No station connected" />}
         {loadError && <Notice tone="warning">{loadError}</Notice>}
         {device?.simulated && <Notice tone="warning">Simulated device: charts show generated test data.</Notice>}
         {device && history.status === 'ready' && history.data.truncated && (

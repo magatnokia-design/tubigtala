@@ -11,6 +11,7 @@ import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { HEADER_CURVE, Radius, Spacing } from '@/constants/theme';
 import { formatDay } from '@/domain/dates';
+import { STATION_NAME } from '@/domain/pairing';
 import { formatPhMobile } from '@/domain/phone';
 import { useAuth } from '@/hooks/use-auth';
 import { useDialog } from '@/hooks/use-dialog';
@@ -19,6 +20,7 @@ import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
 import { signOut } from '@/services/auth';
 import { notificationPermissionGranted, phoneNotificationsSupported, requestNotificationPermission } from '@/services/notifications';
+import { unpairDevice } from '@/services/devices';
 import { updateProfile } from '@/services/profile';
 
 type Pending = null | 'sms' | 'push';
@@ -47,6 +49,18 @@ export default function SettingsScreen() {
     return <View style={[styles.fill, styles.center]}><ActivityIndicator color={theme.tint} /></View>;
   }
   const uid = user.uid;
+
+  async function confirmRemove(deviceId: string, name: string) {
+    const ok = await dialog.confirm({
+      tone: 'warning',
+      title: `Remove ${name}?`,
+      message: 'It stops showing in this app and its alerts stop. You can add it again by scanning its QR sticker.',
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
+    await unpairDevice(deviceId).catch(() =>
+      dialog.notify({ tone: 'danger', title: 'Could not remove the station', message: 'Check your connection and try again.' }));
+  }
 
   async function confirmSignOut() {
     if (await dialog.confirm({ title: 'Sign out?', confirmLabel: 'Sign out' })) signOut();
@@ -134,9 +148,19 @@ export default function SettingsScreen() {
           />
         </Section>
 
+        {!device && (
+          <Section title="Station">
+            <Row icon="qr_code_scanner" label={`Add ${STATION_NAME}`} value="Scan the QR sticker on the station" onPress={() => router.push('/pair-device')} chevron />
+          </Section>
+        )}
+
         {device && (
-          <Section title="Device">
-            <Row icon="sensors" label={device.name} value={device.simulated ? 'Simulated' : undefined} />
+          <Section title="Station">
+            <Row
+              icon="sensors"
+              label={device.name}
+              value={[device.simulated ? 'Simulated' : null, device.pairedAtMs ? `Added ${formatDay(device.pairedAtMs)}` : null].filter(Boolean).join(' · ') || undefined}
+            />
             <Row
               icon="water_ph"
               label="Calibrate pH"
@@ -146,6 +170,7 @@ export default function SettingsScreen() {
               onPress={() => router.push('/calibrate-ph')}
               chevron
             />
+            <Row icon="link_off" label="Remove station" danger onPress={() => confirmRemove(device.id, device.name)} />
           </Section>
         )}
 
@@ -192,17 +217,17 @@ function ChangeLabel() {
   return <ThemedText type="smallBold" style={{ color: theme.tint }}>Change</ThemedText>;
 }
 
-function Row({ icon, label, value, right, onPress, chevron }: {
-  icon: AndroidSymbol; label: string; value?: string; right?: ReactNode; onPress?: () => void; chevron?: boolean;
+function Row({ icon, label, value, right, onPress, chevron, danger }: {
+  icon: AndroidSymbol; label: string; value?: string; right?: ReactNode; onPress?: () => void; chevron?: boolean; danger?: boolean;
 }) {
   const theme = useTheme();
   const content = (
     <>
       <View style={[styles.rowIcon, { backgroundColor: theme.backgroundElement }]}>
-        <Icon name={icon} size={20} />
+        <Icon name={icon} size={20} color={danger ? 'levelCritical' : 'tint'} />
       </View>
       <View style={styles.flex}>
-        <ThemedText>{label}</ThemedText>
+        <ThemedText style={danger ? { color: theme.levelCritical } : undefined}>{label}</ThemedText>
         {value ? <ThemedText type="small" themeColor="textSecondary">{value}</ThemedText> : null}
       </View>
       {right}
