@@ -2,7 +2,7 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.2.2"
+#define FIRMWARE_VERSION "0.2.4"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V
@@ -47,8 +47,13 @@
 #define FIREBASE_PROJECT_ID "tubigtala-64d9e"  // never Dagitab's project
 #define WIFI_RETRY_MS 10000UL
 // Clock (deviceTime is display-only; serverTime is what the app trusts)
-#define NTP_SERVER_1 "time.google.com"
-#define NTP_SERVER_2 "pool.ntp.org"
+// By IP, not name (Google Public NTP, time.google.com): with a name, SNTP leaves a DNS lookup
+// pending, and the first HTTPS request's hostByName() clears the DNS cache, which runs SNTP's
+// callback on the Arduino task without the lwIP core lock -> "assert failed: udp_new_ip_type
+// ... Required to lock TCPIP core functionality!" and a reboot (ESP32 core 3.3.11, seen on the
+// first real board 5 Nov 2026). An IP needs no lookup, so nothing is pending.
+#define NTP_SERVER_1 "216.239.35.0"
+#define NTP_SERVER_2 "216.239.35.4"
 #define TZ_INFO "<+08>-8"  // Philippines, UTC+8, no daylight saving
 #define VALID_EPOCH 1700000000L  // earlier than this = clock not synced yet
 // Readings kept while offline: 60 = one hour at one per minute; oldest dropped when full.
