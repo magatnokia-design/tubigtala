@@ -11,7 +11,7 @@ What can cost money, what to watch, and how to turn everything off safely. Check
 | Expo / EAS | Project registered, no EAS builds used | ₱0 | APKs are built on GitHub, not EAS. |
 | Google sign-in, Firebase Auth | Free tier | ₱0 | |
 
-Rough Firestore usage: one board at one reading a minute writes ~1,440 readings a day. A phone open on the Water tab reads about one document per reading. A 7-day chart or export reads up to 10,080. Several long exports a day by several users is what would approach the read limit.
+Rough Firestore usage: one board at one reading a minute writes ~1,440 readings a day. A phone open on the Water tab reads about one document per reading. A 7-day chart or export reads up to 10,000 (the cap; Firestore allows no more in a live query). Several long exports a day by several users is what would approach the read limit.
 
 ## What will cost money (not set up yet)
 

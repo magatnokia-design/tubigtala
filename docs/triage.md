@@ -9,6 +9,7 @@ Layers: **Sensor** (wiring, probe) · **Board** (firmware, Wi-Fi) · **Upload** 
 | Symptom | Check, in order | Likely layer | Where |
 |---|---|---|---|
 | "No device connected" | Firestore console > `devices`: is there a document whose `ownerUid` is **your** user ID (Authentication > Users)? | Database | `docs/device-setup.md` step 2 |
+| Analytics or Calibrate pH: `Could not load data (invalid-argument). Limit value ... over the maximum value of 10000` | A query asked for more than 10,000 documents; Firestore rejects that for live listeners (the emulator and one-time queries do not). Fixed in app 0.6.3 (`HISTORY_LIMIT` = 10,000). | App | `services/devices.ts` |
 | Device shows **Stale** or **Offline** | Board powered? Serial shows `[cloud] saved #…`? Wi-Fi reachable? `readingIntervalSec` in the device record matches `READING_INTERVAL_MS`? | Board / Upload | serial; `firmware/tubigtala/config.h` |
 | A card shows **—** | That sensor sent `null`: DS18B20 unplugged (-127), pH voltage clipped, MQ-137 still warming up (first 3 min). Serial `READING` line shows which. | Sensor | `docs/wiring.md`; `tubigtala.ino` |
 | pH tagged **Uncalibrated** | Settings > Device > Calibrate pH. After saving, serial shows `[cloud] pH calibration applied` within 10 min. | Board | `docs/wiring.md` Calibration |
@@ -18,7 +19,7 @@ Layers: **Sensor** (wiring, probe) · **Board** (firmware, Wi-Fi) · **Upload** 
 | "Could not save" on sign-up or the phone step | Live Firestore rules older than the app: redeploy (`firebase use` must print `tubigtala-64d9e`, then `firebase deploy --only firestore`). | Database | `firestore.rules` |
 | Google sign-in "Developer error" / code 10 | APK signed with a different keystore than the SHA-1 registered in Firebase, or `google-services.json` secret outdated. | Build | `docs/runbook.md` APK builds |
 | Email sign-in "incorrect" for a correct password | Authentication > Sign-in method > Email/Password enabled? | Database | Firebase console |
-| Excel export fails | Online? (needs a connection). A 7-day range over 10,080 readings is truncated, not failed - the file says so. | App | `services/export.ts` |
+| Excel export fails | Online? (needs a connection). A range over 10,000 readings (a full 7 days at one a minute is 10,080) is truncated, not failed - the file says so. | App | `services/export.ts` |
 | Banner "Offline · showing last saved data" when online | Phone's internet (not just Wi-Fi association). Data shown is the last copy saved on the phone. | App | `hooks/use-online.ts`, `hooks/use-cached.ts` |
 | Errors mention `resource-exhausted` / quota | Spark free tier: 50,000 reads/day. Firebase console > Firestore > Usage. Long charts/exports and many open phones add up. | Database | `docs/shutdown-and-costs.md` |
 

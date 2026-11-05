@@ -78,10 +78,15 @@ export function subscribeLatestReading(
 }
 
 /**
- * Cap on readings fetched per chart or export. Each document read counts against the Spark
- * free tier (50k reads/day); a week (MAX_RANGE_DAYS) at one reading per minute is 10,080.
+ * Cap on readings fetched per chart or export. Firestore rejects a live listener whose limit is
+ * over 10,000 ("Limit value in the structured query is over the maximum value of 10000",
+ * invalid-argument) - seen on the real project 5 Nov 2026; one-time queries and the emulator
+ * accept more, so tests did not catch it. Never raise this above 10,000.
+ * A full week (MAX_RANGE_DAYS) at one reading per minute is 10,080, so it can lose its oldest
+ * 80 minutes; the result is then marked `truncated` and the screen says so.
+ * Each document read also counts against the Spark free tier (50k reads/day).
  */
-export const HISTORY_LIMIT = 10_080;
+export const HISTORY_LIMIT = 10_000;
 
 /**
  * Readings since `sinceMs`, oldest first. `truncated` is true when the cap was hit, i.e. the
