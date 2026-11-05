@@ -17,7 +17,10 @@ function toError(e: FirestoreError): LoadState<never> {
   if (e.code === 'unavailable') {
     return { status: 'error', reason: 'unavailable', message: 'Cannot reach the database. Check your connection.' };
   }
-  return { status: 'error', reason: 'other', message: `Could not load data (${e.code}).` };
+  // Keep Firestore's own sentence: the code alone ("invalid-argument") does not say what was wrong,
+  // and the sentence holds no secrets (it describes the request, e.g. a field or limit).
+  const detail = e.message ? ` ${e.message.replace(/\s+/g, ' ').trim().slice(0, 300)}` : '';
+  return { status: 'error', reason: 'other', message: `Could not load data (${e.code}).${detail}` };
 }
 
 /**

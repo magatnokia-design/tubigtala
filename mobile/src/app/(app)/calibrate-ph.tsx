@@ -139,6 +139,8 @@ export default function CalibratePhScreen() {
       </View>
 
       {!online && <Notice tone="warning">You are offline. Calibration needs a connection.</Notice>}
+      {/* Without this a failed load looked like "Waiting for readings" forever. */}
+      {online && history.status === 'error' && <Notice tone="warning">{history.message}</Notice>}
       {online && !live && <Notice tone="warning">{`${device.name} is not sending readings right now. Connect it first.`}</Notice>}
 
       {step !== 'review' ? (
