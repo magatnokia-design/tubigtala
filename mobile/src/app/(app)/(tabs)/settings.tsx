@@ -7,14 +7,19 @@ import { router } from 'expo-router';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { Notice } from '@/components/notice';
+import { StatusPill } from '@/components/status-pill';
 import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { HEADER_CURVE, Radius, Spacing } from '@/constants/theme';
 import { formatDay } from '@/domain/dates';
+import { formatAge } from '@/domain/format';
 import { STATION_NAME } from '@/domain/pairing';
 import { formatPhMobile } from '@/domain/phone';
+import { deviceStatus } from '@/domain/status';
 import { useAuth } from '@/hooks/use-auth';
+import { useLatestReading } from '@/hooks/use-devices';
 import { useDialog } from '@/hooks/use-dialog';
+import { useNow } from '@/hooks/use-now';
 import { useProfile } from '@/hooks/use-profile';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
@@ -36,6 +41,10 @@ export default function SettingsScreen() {
   const [osPermission, setOsPermission] = useState<boolean | null>(null);
 
   const p = profile.status === 'ready' ? profile.data : null;
+  // Station status for the Station row: newest reading's server time, refreshed every 5 s.
+  const latest = useLatestReading(device?.id ?? null);
+  const now = useNow();
+  const lastReadingMs = latest.status === 'ready' && latest.data ? latest.data.serverTimeMs : null;
 
   // Android can revoke the permission behind the app's back; flag it if the switch is on.
   useEffect(() => {
@@ -159,7 +168,13 @@ export default function SettingsScreen() {
             <Row
               icon="sensors"
               label={device.name}
-              value={[device.simulated ? 'Simulated' : null, device.pairedAtMs ? `Added ${formatDay(device.pairedAtMs)}` : null].filter(Boolean).join(' · ') || undefined}
+              value={[
+                device.simulated ? 'Simulated' : null,
+                device.pairedAtMs ? `Added ${formatDay(device.pairedAtMs)}` : null,
+                lastReadingMs !== null ? `last reading ${formatAge(now - lastReadingMs)}` : null,
+              ].filter(Boolean).join(' · ') || undefined}
+              // Same rule and badge as the Water tab (domain/status.ts), so the two never disagree.
+              right={latest.status === 'loading' ? undefined : <StatusPill status={deviceStatus(lastReadingMs, device.readingIntervalSec, now)} />}
             />
             <Row
               icon="water_ph"
