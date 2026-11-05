@@ -25,19 +25,21 @@ export interface ModalAction {
 }
 
 /**
- * The app's dialog: dimmed backdrop, white card, tone icon, title, optional message or
- * custom content, and up to a few actions (stacked, primary first).
+ * The app's dialog, kept compact: a small tone icon beside the title, optional message or custom
+ * content, and the actions side by side (the first action is the main one and sits on the right).
  */
-export function AppModal({ visible, onClose, tone = 'info', icon, title, message, children, actions = [], compact = false }: {
+export function AppModal({ visible, onClose, tone = 'info', icon, title, aside, message, children, actions = [], compact = false }: {
   visible: boolean;
   onClose: () => void;
   tone?: ModalTone;
   icon?: AndroidSymbol;
   title: string;
+  /** shown at the end of the title row, e.g. a status chip */
+  aside?: ReactNode;
   message?: string;
   children?: ReactNode;
   actions?: ModalAction[];
-  /** no icon, smaller title and spacing (e.g. the calendar) */
+  /** no icon (e.g. the calendar) */
   compact?: boolean;
 }) {
   const theme = useTheme();
@@ -45,19 +47,22 @@ export function AppModal({ visible, onClose, tone = 'info', icon, title, message
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: theme.overlay }]} onPress={onClose} accessibilityLabel="Close">
-        <Pressable style={[styles.card, compact && styles.cardCompact, { backgroundColor: theme.background }]} onPress={() => {}}>
-          {!compact && (
-            <View style={[styles.iconWrap, { backgroundColor: theme[t.bg] }]}>
-              <Icon name={icon ?? t.icon} size={30} color={t.fg} />
-            </View>
-          )}
-          <ThemedText style={[styles.title, compact && styles.titleCompact]}>{title}</ThemedText>
-          {message ? <ThemedText themeColor="textSecondary" style={styles.message}>{message}</ThemedText> : null}
+        <Pressable style={[styles.card, { backgroundColor: theme.background }]} onPress={() => {}}>
+          <View style={styles.header}>
+            {!compact && (
+              <View style={[styles.iconWrap, { backgroundColor: theme[t.bg] }]}>
+                <Icon name={icon ?? t.icon} size={20} color={t.fg} />
+              </View>
+            )}
+            <ThemedText style={styles.title}>{title}</ThemedText>
+            {aside}
+          </View>
+          {message ? <ThemedText type="small" themeColor="textSecondary" style={styles.message}>{message}</ThemedText> : null}
           {children}
           {actions.length > 0 && (
-            <View style={[styles.actions, compact && styles.actionsCompact]}>
+            <View style={styles.actions}>
               {actions.map((a) => (
-                <Button key={a.label} label={a.label} onPress={a.onPress} variant={a.variant ?? 'primary'} busy={a.busy} style={compact ? styles.actionCompact : undefined} />
+                <Button key={a.label} label={a.label} onPress={a.onPress} variant={a.variant ?? 'primary'} busy={a.busy} style={styles.action} />
               ))}
             </View>
           )}
@@ -69,15 +74,14 @@ export function AppModal({ visible, onClose, tone = 'info', icon, title, message
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
-  card: { width: '100%', maxWidth: 420, borderRadius: 24, padding: Spacing.four, gap: Spacing.three, alignItems: 'stretch' },
-  iconWrap: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
-  title: { fontSize: 20, lineHeight: 26, fontWeight: 700, textAlign: 'center' },
-  message: { textAlign: 'center' },
-  actions: { gap: Spacing.two, marginTop: Spacing.one },
-  cardCompact: { padding: Spacing.three, gap: Spacing.two, maxWidth: 360 },
-  titleCompact: { fontSize: 17, lineHeight: 22 },
-  actionsCompact: { flexDirection: 'row-reverse', gap: Spacing.two, marginTop: 0 },
-  actionCompact: { flex: 1, minHeight: 44, paddingHorizontal: Spacing.two },
+  card: { width: '100%', maxWidth: 380, borderRadius: 20, padding: Spacing.three, gap: Spacing.two + 2 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  iconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  title: { flex: 1, fontSize: 17, lineHeight: 22, fontWeight: 700 },
+  message: { lineHeight: 20 },
+  // row-reverse: the first (main) action ends up on the right
+  actions: { flexDirection: 'row-reverse', gap: Spacing.two, marginTop: Spacing.one },
+  action: { flex: 1, minHeight: 44, paddingHorizontal: Spacing.two },
 });
 
 export const modalRadius = Radius.card;

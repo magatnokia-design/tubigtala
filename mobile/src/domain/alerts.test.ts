@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ALERT_COOLDOWN_MS, alertText, nextAlertStep, shouldAlert, type AlertState } from './alerts.ts';
+import { ALERT_COOLDOWN_MS, alertDetail, alertHeadline, alertText, nextAlertStep, shouldAlert, type AlertState } from './alerts.ts';
 
 const T = 1_800_000_000_000;
 const state = (s: Partial<AlertState>): AlertState => ({ level: 'normal', alertLevel: null, alertedAtMs: null, ...s });
@@ -70,4 +70,13 @@ test('alert text fits the stored limits (title 80, body 200) with a 40-character
   const t = alertText('nh3GasMv', 'A bit high', 1234, name, { simulated: true, uncalibrated: true });
   assert.ok(t.title.length <= 80);
   assert.ok(t.body.length <= 200);
+});
+
+test('in-app headline and detail leave out the station name', () => {
+  assert.equal(alertHeadline('temperatureC', 'A bit warm'), 'Water a bit warm');
+  assert.equal(alertHeadline('ph', 'Too high'), 'pH too high', 'pH keeps its lowercase p');
+  assert.equal(alertHeadline('nh3GasMv', 'Too high'), 'Ammonia gas too high');
+  assert.equal(alertDetail('temperatureC', 33.4), '33.4 °C · normal 20 to 32 °C');
+  assert.equal(alertDetail('nh3GasMv', 3586), '3586 mV · normal up to 600 mV');
+  assert.equal(alertDetail('ph', null), '— · normal 6.5 to 8.5', 'missing value is a dash, never 0');
 });

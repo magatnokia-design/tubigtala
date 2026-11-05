@@ -1,18 +1,17 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
-import type { AndroidSymbol } from 'expo-symbols';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { Notice } from '@/components/notice';
+import { Row, Section } from '@/components/settings-list';
 import { StatusPill } from '@/components/status-pill';
 import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
-import { HEADER_CURVE, Radius, Spacing } from '@/constants/theme';
+import { HEADER_CURVE, Spacing } from '@/constants/theme';
 import { formatDay } from '@/domain/dates';
-import { formatAge } from '@/domain/format';
 import { STATION_NAME } from '@/domain/pairing';
 import { formatPhMobile } from '@/domain/phone';
 import { deviceStatus } from '@/domain/status';
@@ -120,8 +119,13 @@ export default function SettingsScreen() {
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
       <TabHeader title="Settings" />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        {/* One row: name, password and sign-in details live on the Account screen. */}
         <Section title="Account">
-          <View style={styles.account}>
+          <Pressable
+            onPress={() => router.push('/account')}
+            accessibilityRole="button"
+            accessibilityLabel="Account"
+            style={({ pressed }) => [styles.account, pressed && { backgroundColor: theme.backgroundElement }]}>
             <View style={[styles.avatar, { backgroundColor: theme.tint }]}>
               <ThemedText style={[styles.avatarText, { color: theme.onTint }]}>{initials}</ThemedText>
             </View>
@@ -129,28 +133,22 @@ export default function SettingsScreen() {
               <ThemedText type="smallBold" style={styles.name} numberOfLines={1}>{p.displayName}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} ellipsizeMode="middle">{user.email ?? ''}</ThemedText>
             </View>
-          </View>
-          {/* Shows the current value; editing starts only when the user taps Change. */}
-          <Row
-            icon="person"
-            label="Name"
-            value={p.displayName}
-            right={<ChangeLabel />}
-            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'name' } })}
-          />
+            <Icon name="chevron_right" color="textSecondary" />
+          </Pressable>
         </Section>
 
+        {/* One row: the switch turns SMS on/off; tapping the row changes the number. */}
         <Section title="SMS">
-          <Row
-            icon="phone_iphone"
-            label="Mobile number"
-            value={p.phoneE164 ? formatPhMobile(p.phoneE164) : 'Not set'}
-            right={<ChangeLabel />}
-            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'phone' } })}
-          />
           <Row
             icon="sms"
             label="SMS alerts"
+            value={
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                {p.phoneE164 ? `${formatPhMobile(p.phoneE164)} · ` : 'No number · '}
+                <ThemedText type="smallBold" style={{ color: theme.tint }}>{p.phoneE164 ? 'Change' : 'Add'}</ThemedText>
+              </ThemedText>
+            }
+            onPress={() => router.push({ pathname: '/edit-profile', params: { field: 'phone' } })}
             right={pending === 'sms'
               ? <ActivityIndicator color={theme.tint} />
               : <Switch value={p.smsAlertsEnabled} onValueChange={toggleSms} disabled={pending !== null || !p.phoneE164} {...switchColors} />}
@@ -168,11 +166,7 @@ export default function SettingsScreen() {
             <Row
               icon="sensors"
               label={device.name}
-              value={[
-                device.simulated ? 'Simulated' : null,
-                device.pairedAtMs ? `Added ${formatDay(device.pairedAtMs)}` : null,
-                lastReadingMs !== null ? `last reading ${formatAge(now - lastReadingMs)}` : null,
-              ].filter(Boolean).join(' · ') || undefined}
+              value={device.simulated ? 'Simulated' : undefined}
               // Same rule and badge as the Water tab (domain/status.ts), so the two never disagree.
               right={latest.status === 'loading' ? undefined : <StatusPill status={deviceStatus(lastReadingMs, device.readingIntervalSec, now)} />}
             />
@@ -192,7 +186,7 @@ export default function SettingsScreen() {
         <Section title="Notifications">
           <Row
             icon="notifications_active"
-            label="Allow notifications"
+            label="Phone notifications"
             value={!phoneNotificationsSupported ? 'Works in the installed app' : p.pushEnabled && osPermission === false ? 'Off in Android settings' : undefined}
             right={pending === 'push'
               ? <ActivityIndicator color={theme.tint} />
@@ -217,61 +211,16 @@ export default function SettingsScreen() {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>{title.toUpperCase()}</ThemedText>
-      <View style={[styles.sectionBody, { borderColor: theme.border }]}>{children}</View>
-    </View>
-  );
-}
-
-function ChangeLabel() {
-  const theme = useTheme();
-  return <ThemedText type="smallBold" style={{ color: theme.tint }}>Change</ThemedText>;
-}
-
-function Row({ icon, label, value, right, onPress, chevron, danger }: {
-  icon: AndroidSymbol; label: string; value?: string; right?: ReactNode; onPress?: () => void; chevron?: boolean; danger?: boolean;
-}) {
-  const theme = useTheme();
-  const content = (
-    <>
-      <View style={[styles.rowIcon, { backgroundColor: theme.backgroundElement }]}>
-        <Icon name={icon} size={20} color={danger ? 'levelCritical' : 'tint'} />
-      </View>
-      <View style={styles.flex}>
-        <ThemedText style={danger ? { color: theme.levelCritical } : undefined}>{label}</ThemedText>
-        {value ? <ThemedText type="small" themeColor="textSecondary">{value}</ThemedText> : null}
-      </View>
-      {right}
-      {chevron && <Icon name="chevron_right" color="textSecondary" />}
-    </>
-  );
-  if (!onPress) return <View style={styles.row}>{content}</View>;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}>
-      {content}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
   scroll: { marginTop: -HEADER_CURVE },
-  content: { padding: Spacing.four, paddingTop: HEADER_CURVE + Spacing.three, gap: Spacing.four, paddingBottom: Spacing.six },
-  section: { gap: Spacing.two },
-  sectionTitle: { letterSpacing: 1, fontSize: 12 },
-  sectionBody: { borderWidth: 1, borderRadius: Radius.card, overflow: 'hidden', paddingVertical: Spacing.one },
-  account: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three },
-  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
-  name: { fontSize: 18, lineHeight: 24 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, minHeight: 56 },
-  rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  content: { padding: Spacing.four, paddingTop: HEADER_CURVE + Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
+  account: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2 },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 17, lineHeight: 22, fontWeight: 700 },
+  name: { fontSize: 16, lineHeight: 22 },
   error: { gap: Spacing.two },
   signOut: { marginTop: Spacing.two },
   version: { textAlign: 'center' },

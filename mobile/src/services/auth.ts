@@ -1,8 +1,9 @@
 // Firebase Authentication access. Maps Firebase error codes to messages a user can act on.
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import {
-  createUserWithEmailAndPassword, GoogleAuthProvider, onAuthStateChanged, signInWithCredential,
-  signInWithEmailAndPassword, signOut as fbSignOut, updateProfile as updateAuthProfile, type User,
+  createUserWithEmailAndPassword, EmailAuthProvider, GoogleAuthProvider, onAuthStateChanged, reauthenticateWithCredential,
+  signInWithCredential, signInWithEmailAndPassword, signOut as fbSignOut, updatePassword, updateProfile as updateAuthProfile,
+  type User,
 } from 'firebase/auth';
 
 import { auth, usingEmulator } from '@/services/firebase';
@@ -70,6 +71,25 @@ export async function signInWithGoogle(): Promise<boolean> {
   if (!idToken) throw new GoogleSignInUnavailableError('Google did not return an ID token (check the web client ID).');
   await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
   return true;
+}
+
+/**
+ * True when the account was registered with email + password. Google sign-ins have no password
+ * in Firebase, so the app offers no password change for them.
+ */
+export function hasPasswordSignIn(user: User): boolean {
+  return user.providerData.some((p) => p.providerId === 'password');
+}
+
+/**
+ * Changes the password of an email + password account. Firebase requires a recent sign-in for
+ * this, so the current password is checked first (reauthentication), then the new one is set.
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user?.email || !hasPasswordSignIn(user)) throw Object.assign(new Error('No password sign-in'), { code: 'tubigtala/no-password' });
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword));
+  await updatePassword(user, newPassword);
 }
 
 export async function signOut(): Promise<void> {
