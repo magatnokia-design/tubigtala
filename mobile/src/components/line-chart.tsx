@@ -4,19 +4,22 @@ import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgT
 
 import { ThemedText } from '@/components/themed-text';
 import { Fonts } from '@/constants/theme';
-import { downsample, stats, type Point } from '@/domain/readings';
+import { chartSeries, niceTicks, stats, type Point } from '@/domain/readings';
 import { formatClock, formatDateTime } from '@/domain/format';
 import { useTheme } from '@/hooks/use-theme';
 
 const DEFAULT_HEIGHT = 150;
 const PAD = { top: 12, right: 12, bottom: 22, left: 40 };
 const MAX_POINTS = 160;
+/** Default: 3 reading intervals of 60 s, the same point at which the station counts as stale. */
+const DEFAULT_GAP_MS = 3 * 60_000;
 
 /**
- * Line + soft area chart drawn with SVG. Missing values (null) break the line rather than
- * dropping to zero; the y-range fits the data with a little headroom.
+ * Line + soft area chart drawn with SVG. Missing values (null) and time gaps (station off or
+ * offline for longer than `gapMs`) break the line rather than joining across them; a value with
+ * no neighbours is drawn as a dot. The y-axis uses round numbers.
  */
-export function LineChart({ points, decimals, color, gradientId, band, height = DEFAULT_HEIGHT }: {
+export function LineChart({ points, decimals, color, gradientId, band, height = DEFAULT_HEIGHT, gapMs = DEFAULT_GAP_MS }: {
   points: Point[];
   decimals: number;
   color?: string;
@@ -25,12 +28,14 @@ export function LineChart({ points, decimals, color, gradientId, band, height = 
   /** normal range, shaded behind the line */
   band?: [number, number];
   height?: number;
+  /** no reading for longer than this = a gap in the line */
+  gapMs?: number;
 }) {
   const HEIGHT = height;
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const stroke = color ?? theme.tint;
-  const data = downsample(points, MAX_POINTS);
+  const data = chartSeries(points, MAX_POINTS, gapMs);
   const s = stats(data.map((p) => p.v));
 
   if (!s || data.length < 2) {
@@ -46,8 +51,12 @@ export function LineChart({ points, decimals, color, gradientId, band, height = 
   }
 
   const span = s.max - s.min || Math.max(Math.abs(s.max) * 0.1, 1);
-  const yMin = s.min - span * 0.15;
-  const yMax = s.max + span * 0.15;
+  const lo = s.min - span * 0.1;
+  const hi = s.max + span * 0.1;
+  const ticks = niceTicks(lo, hi, 3);
+  const yMin = Math.min(lo, ticks[0] ?? lo);
+  const yMax = Math.max(hi, ticks[ticks.length - 1] ?? hi);
+  const tickDecimals = ticks.length > 1 && ticks.every((v) => Number.isInteger(v)) ? 0 : decimals;
   const t0 = data[0].t;
   const t1 = data[data.length - 1].t;
   const plotW = Math.max(width - PAD.left - PAD.right, 1);
@@ -63,7 +72,8 @@ export function LineChart({ points, decimals, color, gradientId, band, height = 
   }
   if (run.length) runs.push(run);
 
-  const line = runs.map((r) => r.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v as number).toFixed(1)}`).join('')).join('');
+  const dots = runs.filter((r) => r.length === 1).map((r) => r[0]);
+  const line = runs.filter((r) => r.length > 1).map((r) => r.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v as number).toFixed(1)}`).join('')).join('');
   const area = runs
     .filter((r) => r.length > 1)
     .map((r) => `M${x(r[0].t)},${PAD.top + plotH}` + r.map((p) => `L${x(p.t).toFixed(1)},${y(p.v as number).toFixed(1)}`).join('') + `L${x(r[r.length - 1].t)},${PAD.top + plotH}Z`)
@@ -71,7 +81,6 @@ export function LineChart({ points, decimals, color, gradientId, band, height = 
   const lastRun = runs[runs.length - 1];
   const last = lastRun[lastRun.length - 1];
   const timeLabel = t1 - t0 > 24 * 3_600_000 ? formatDateTime : formatClock;
-  const ticks = [yMax - (yMax - yMin) * 0.1, (yMin + yMax) / 2, yMin + (yMax - yMin) * 0.1];
 
   return (
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height: HEIGHT }}>
@@ -88,7 +97,7 @@ export function LineChart({ points, decimals, color, gradientId, band, height = 
           ))}
           {ticks.map((v) => (
             <SvgText key={`l${v}`} x={PAD.left - 6} y={y(v) + 4} fontSize={11} fill={theme.textSecondary} textAnchor="end" fontFamily={Fonts?.sans}>
-              {v.toFixed(decimals)}
+              {v.toFixed(tickDecimals)}
             </SvgText>
           ))}
           {band && (() => {
@@ -98,6 +107,9 @@ export function LineChart({ points, decimals, color, gradientId, band, height = 
           })()}
           <Path d={area} fill={`url(#${gradientId})`} />
           <Path d={line} stroke={stroke} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+          {dots.map((p) => (
+            <Circle key={`d${p.t}`} cx={x(p.t)} cy={y(p.v as number)} r={2.5} fill={stroke} />
+          ))}
           <Circle cx={x(last.t)} cy={y(last.v as number)} r={5} fill={stroke} stroke={theme.background} strokeWidth={2} />
           <SvgText x={PAD.left} y={HEIGHT - 4} fontSize={11} fill={theme.textSecondary} fontFamily={Fonts?.sans}>{timeLabel(t0)}</SvgText>
           <SvgText x={width - PAD.right} y={HEIGHT - 4} fontSize={11} fill={theme.textSecondary} textAnchor="end" fontFamily={Fonts?.sans}>
