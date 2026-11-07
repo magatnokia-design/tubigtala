@@ -66,9 +66,9 @@ Water type: **fresh / tap water** (decided 4 Nov 2026). `mobile/src/domain/thres
 |---|---|---|---|---|
 | pH | 6.5–8.5 | 6.0–6.5 / 8.5–9.0 | below 6.0 / above 9.0 | A bit low, Too low / A bit high, Too high |
 | Temperature | 20–32 °C | 15–20 / 32–35 °C | below 15 / above 35 °C | A bit cold, Too cold / A bit warm, Too hot |
-| Ammonia gas | up to 600 mV | 600–900 mV | above 900 mV | A bit high, Too high |
+| Ammonia gas | up to 1700 mV | 1701–2200 mV | above 2200 mV | A bit high, Too high |
 
-pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no safety limit for tap water; its range only flags unusual water. **Ammonia gas ranges are placeholders** until the real sensor's baseline is measured in clean air above clean water. Status words are plain on purpose ("too high", not "too basic").
+pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no safety limit for tap water; its range only flags unusual water. **Ammonia gas ranges** come from tank-01's clean-air baseline (7 Nov 2026, 10 min of `pins` in the enclosure above tap water, after burn-in): mean 1396 mV, p95 1461, max 1505 (module output). Normal leaves ~300 mV above the baseline; they are relative to this sensor, not ppm. Re-record the baseline if the sensor or enclosure changes, and adjust. Status words are plain on purpose ("too high", not "too basic").
 
 ### Alert policy for SMS and email
 
@@ -78,7 +78,7 @@ Decided 4 Nov 2026. **Built for reading alerts in `functions/` and tested on the
 |---|---|---|---|
 | pH or temperature warning | yes | yes | no |
 | pH or temperature critical | yes | yes | yes, after 3 critical readings in a row; pH only when calibrated |
-| Ammonia gas warning or critical | yes | yes | no (ranges are placeholders) |
+| Ammonia gas warning or critical | yes | yes | no (relative reading, not ppm - SMS kept for pH and temperature) |
 | A sensor sends no value for 10 min (gas: after warm-up) | yes | yes | no |
 | Device offline (no readings for 30 min) / back online | yes | yes | no |
 | SMS monthly limit reached | yes | yes | no |

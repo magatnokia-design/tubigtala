@@ -61,7 +61,11 @@ export default function CalibratePhScreen() {
   const live = latest && device ? deviceStatus(latest.serverTimeMs, device.readingIntervalSec, now) === 'live' : false;
   // First load: remember where step 1 starts (React's "adjust state while rendering" pattern).
   if (stepAfter === null && history.status === 'ready') setStepAfter(latest?.serverTimeMs ?? 0);
-  const stepMvs = stepAfter === null ? [] : readings.filter((r) => r.serverTimeMs > stepAfter).map((r) => r.phMv);
+  const stepReadings = stepAfter === null ? [] : readings.filter((r) => r.serverTimeMs > stepAfter);
+  const stepMvs = stepReadings.map((r) => r.phMv);
+  // Readings arrive but none carries a pH voltage: the pH board is missing, switched off in the
+  // firmware (PH_ENABLED 0), or clipping. Different from simply waiting for the next reading.
+  const noPhVoltage = stepReadings.length > 0 && stepReadings.every((r) => r.phMv === null);
   const s = stability(stepMvs);
   const cal = device?.phCalibration;
   const intervalText = device ? `${device.readingIntervalSec >= 60 ? `${Math.round(device.readingIntervalSec / 60)} min` : `${device.readingIntervalSec} s`}` : '';
@@ -141,6 +145,9 @@ export default function CalibratePhScreen() {
       {!online && <Notice tone="warning">You are offline. Calibration needs a connection.</Notice>}
       {/* Without this a failed load looked like "Waiting for readings" forever. */}
       {online && history.status === 'error' && <Notice tone="warning">{history.message}</Notice>}
+      {noPhVoltage && step !== 'review' && (
+        <Notice tone="warning">The station is sending readings, but none has a pH voltage. Check that the pH board and probe are connected. Calibration needs a working pH board.</Notice>
+      )}
       {online && !live && <Notice tone="warning">{`${device.name} is not sending readings right now. Connect it first.`}</Notice>}
 
       {step !== 'review' ? (
@@ -175,8 +182,8 @@ export default function CalibratePhScreen() {
               <ThemedText themeColor="textSecondary" style={styles.mvUnit}>mV</ThemedText>
             </View>
             <LevelChip
-              level={s.value === null ? 'unknown' : s.stable ? 'normal' : 'warning'}
-              label={s.value === null ? 'Waiting for readings' : s.stable ? 'Stable' : 'Settling…'}
+              level={s.value === null ? (noPhVoltage ? 'warning' : 'unknown') : s.stable ? 'normal' : 'warning'}
+              label={s.value === null ? (noPhVoltage ? 'No pH voltage' : 'Waiting for the next reading') : s.stable ? 'Stable' : 'Settling…'}
             />
             <ThemedText type="small" themeColor="textSecondary">
               {`New reading every ${intervalText}. Stable = ${STABLE_READINGS} readings within ${STABLE_WITHIN_MV} mV.`}

@@ -16,7 +16,8 @@ export interface Tag {
 
 /**
  * One reading on the Water tab. The status ("Normal", "Too hot") is the headline: the card's
- * border, value and chip take its colour, so a problem is visible at a glance.
+ * border, value and chip take its colour, so a problem is visible at a glance. The card grows to
+ * fill its share of the screen (the Water tab fits all three without scrolling on a normal phone).
  */
 export function MetricCard({ icon, label, value, unit, status, note, tags = [], dimmed, children }: {
   icon: AndroidSymbol;
@@ -52,12 +53,11 @@ export function MetricCard({ icon, label, value, unit, status, note, tags = [], 
         <ThemedText style={[styles.value, alert && { color: theme[c.fg] }]}>{value}</ThemedText>
         {unit ? <ThemedText style={[styles.unit, { color: theme.textSecondary }]}>{unit}</ThemedText> : null}
       </View>
-      {note ? <ThemedText type="small" themeColor="textSecondary">{note}</ThemedText> : null}
 
-      {children}
-
-      {tags.length > 0 && (
-        <View style={styles.tags}>
+      {/* Note and tags share one line to keep the card short. */}
+      {(note || tags.length > 0) && (
+        <View style={styles.meta}>
+          {note ? <ThemedText type="small" themeColor="textSecondary" style={styles.note}>{note}</ThemedText> : null}
           {tags.map((t) => (
             <View key={t.label} style={[styles.tag, { backgroundColor: t.tone === 'warning' ? theme.warning : theme.notice }]}>
               <ThemedText type="small" style={[styles.tagText, { color: t.tone === 'warning' ? theme.onWarning : theme.onNotice }]}>{t.label}</ThemedText>
@@ -65,20 +65,24 @@ export function MetricCard({ icon, label, value, unit, status, note, tags = [], 
           ))}
         </View>
       )}
+
+      {children}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: Radius.card, borderWidth: 1, padding: Spacing.three, gap: Spacing.one },
+  // flex: 1 shares the screen height between the cards; space-between spreads the rows inside.
+  card: { flex: 1, minHeight: 150, justifyContent: 'space-between', borderRadius: Radius.card, borderWidth: 1, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, gap: 2 },
   alertBorder: { borderWidth: 2 },
   top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  iconWrap: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  iconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   label: { flex: 1, letterSpacing: 1, fontSize: 12 },
-  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two, marginTop: Spacing.one },
-  value: { fontSize: 46, lineHeight: 52, fontWeight: 700 },
-  unit: { fontSize: 18, lineHeight: 24, fontWeight: 600 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one, marginTop: Spacing.one },
-  tag: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Radius.pill },
+  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  value: { fontSize: 38, lineHeight: 44, fontWeight: 700 },
+  unit: { fontSize: 16, lineHeight: 22, fontWeight: 600 },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.one },
+  note: { marginRight: Spacing.one },
+  tag: { paddingHorizontal: Spacing.two, paddingVertical: 1, borderRadius: Radius.pill },
   tagText: { fontSize: 11, lineHeight: 15 },
 });

@@ -174,8 +174,8 @@ export default function SettingsScreen() {
               icon="water_ph"
               label="Calibrate pH"
               value={device.phCalibration?.status === 'calibrated' && device.phCalibration.calibratedAtMs
-                ? `Calibrated ${formatDay(device.phCalibration.calibratedAtMs)}`
-                : 'Not calibrated'}
+                ? `Calibrated ${formatDay(device.phCalibration.calibratedAtMs)} · redo every few weeks`
+                : 'Not calibrated · set up with your pH buffers'}
               onPress={() => router.push('/calibrate-ph')}
               chevron
             />

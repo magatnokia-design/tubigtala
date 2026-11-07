@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { addDays, daysInRange, endOfDay, MAX_RANGE_DAYS, monthGrid, startOfDay, tapDay } from './dates.ts';
+import { addDays, DATA_START_DAY, daysInRange, endOfDay, isSelectableDay, lastPickableEnd, monthGrid, pickModeOf, startOfDay } from './dates.ts';
 import { insight, insightSentence } from './insights.ts';
 import { classify, isEscalation, normalRangeText } from './thresholds.ts';
 
@@ -18,9 +18,9 @@ test('classify: boundaries are inclusive and words match direction', () => {
   assert.deepEqual(classify('temperatureC', 18), { level: 'warning', label: 'A bit cold' });
   assert.deepEqual(classify('temperatureC', 14), { level: 'critical', label: 'Too cold' });
   assert.deepEqual(classify('temperatureC', 36), { level: 'critical', label: 'Too hot' });
-  assert.deepEqual(classify('nh3GasMv', 600), { level: 'normal', label: 'Normal' });
-  assert.deepEqual(classify('nh3GasMv', 750), { level: 'warning', label: 'A bit high' });
-  assert.deepEqual(classify('nh3GasMv', 950), { level: 'critical', label: 'Too high' });
+  assert.deepEqual(classify('nh3GasMv', 1700), { level: 'normal', label: 'Normal' });
+  assert.deepEqual(classify('nh3GasMv', 1701), { level: 'warning', label: 'A bit high' });
+  assert.deepEqual(classify('nh3GasMv', 2201), { level: 'critical', label: 'Too high' });
 });
 
 test('classify: missing is unknown, never normal', () => {
@@ -40,7 +40,7 @@ test('escalation only when it gets worse', () => {
 test('range text', () => {
   assert.equal(normalRangeText('ph'), '6.5 to 8.5');
   assert.equal(normalRangeText('temperatureC'), '20 to 32 °C');
-  assert.equal(normalRangeText('nh3GasMv'), 'up to 600 mV');
+  assert.equal(normalRangeText('nh3GasMv'), 'up to 1700 mV');
 });
 
 test('insight skips missing values and finds extremes', () => {
@@ -75,16 +75,30 @@ test('month grid: October 2026 starts on Thursday, 31 days, 6x7', () => {
   assert.equal(g.flat().filter((d) => d !== null).length, 31);
 });
 
-test('tapDay: single day, range, restart, and the 7-day cap', () => {
-  const d = (n: number) => new Date(2026, 9, n).getTime();
-  let s = tapDay(null, d(10), 'start');
-  assert.deepEqual(s.range, { start: d(10), end: d(10) });
-  s = tapDay(s.range, d(12), s.picking);
-  assert.deepEqual(s.range, { start: d(10), end: d(12) });
-  s = tapDay(s.range, d(5), s.picking); // picking start again
-  assert.deepEqual(s.range, { start: d(5), end: d(5) });
-  s = tapDay(s.range, d(30), s.picking); // too long: clamped
-  assert.deepEqual(s.range, { start: d(5), end: d(5 + MAX_RANGE_DAYS - 1) });
-  s = tapDay({ start: d(10), end: d(10) }, d(8), 'end'); // before start: restart there
-  assert.deepEqual(s.range, { start: d(8), end: d(8) });
+test('newest reading is "now": a missing newest value is not covered by an older one', () => {
+  // the case seen on 5 Nov: pH values during a test, then readings with no pH
+  const i = insight('ph', [{ t: 1, v: 10.9 }, { t: 2, v: null }, { t: 3, v: null }]);
+  assert.deepEqual(i.newest, { t: 3, v: null });
+  assert.deepEqual(i.latest, { t: 1, v: 10.9 }, 'last valid value is still known, for the "last value" line');
+  assert.deepEqual(insight('ph', [{ t: 1, v: 7 }, { t: 2, v: 7.4 }]).newest, { t: 2, v: 7.4 });
+  assert.equal(insight('ph', []).newest, null);
+  assert.equal(insight('ph', [{ t: 5, v: Number.NaN }]).newest?.v, null, 'NaN is no value, not a number');
+});
+
+test('calendar: only 1 Nov 2026 up to today can be picked', () => {
+  const today = new Date(2026, 10, 7).getTime();
+  assert.equal(DATA_START_DAY, new Date(2026, 10, 1).getTime());
+  assert.equal(isSelectableDay(new Date(2026, 9, 31).getTime(), today), false, '31 Oct: before data started');
+  assert.equal(isSelectableDay(new Date(2026, 10, 1).getTime(), today), true);
+  assert.equal(isSelectableDay(today, today), true);
+  assert.equal(isSelectableDay(addDays(today, 1), today), false, 'tomorrow');
+});
+
+test('calendar: mode of a selection, and how far a range may reach', () => {
+  const today = new Date(2026, 10, 7).getTime();
+  assert.equal(pickModeOf({ start: today, end: today }, today), 'today');
+  assert.equal(pickModeOf({ start: addDays(today, -2), end: addDays(today, -2) }, today), 'day');
+  assert.equal(pickModeOf({ start: addDays(today, -2), end: today }, today), 'range');
+  assert.equal(lastPickableEnd(new Date(2026, 10, 1).getTime(), today), today, 'capped at today');
+  assert.equal(lastPickableEnd(new Date(2026, 10, 1).getTime(), new Date(2026, 10, 20).getTime()), new Date(2026, 10, 7).getTime(), '7 days');
 });

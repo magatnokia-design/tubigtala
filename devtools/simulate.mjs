@@ -21,7 +21,7 @@ await signInWithEmailAndPassword(auth, DEMO_DEVICE.email, DEMO_DEVICE.password);
 
 // Out-of-range values used by --alert (critical for the placeholder ranges in
 // mobile/src/domain/thresholds.ts).
-const ALERT_VALUES = { ph: { ph: 9.4 }, temp: { temperatureC: 36.5 }, nh3: { nh3GasMv: 1100 } };
+const ALERT_VALUES = { ph: { ph: 9.4 }, temp: { temperatureC: 36.5 }, nh3: { nh3GasMv: 2400 } };
 const alertArg = process.argv.find((a) => a.startsWith('--alert='))?.split('=')[1];
 if (alertArg && !ALERT_VALUES[alertArg]) {
   console.error('--alert must be ph, temp or nh3');
