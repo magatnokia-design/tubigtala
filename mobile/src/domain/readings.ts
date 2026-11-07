@@ -31,16 +31,46 @@ export interface Point {
 }
 
 /**
- * Reduces a series to at most `maxPoints` by averaging equal-size buckets. A bucket whose
- * samples are all missing stays null, so the chart shows a gap instead of a fake value.
+ * Prepares a series for a chart: at most `maxPoints`, spaced evenly in TIME (not by count), and
+ * with a null wherever the station sent nothing for longer than `gapMs`, so the line breaks
+ * there instead of drawing a straight line across hours with no data. A bucket whose readings are
+ * all missing also stays null. Points must be in time order.
  */
-export function downsample(points: Point[], maxPoints: number): Point[] {
-  if (points.length <= maxPoints) return points;
+export function chartSeries(points: Point[], maxPoints: number, gapMs: number): Point[] {
+  if (points.length < 2) return points;
+  const t0 = points[0].t;
+  const t1 = points[points.length - 1].t;
+  let series = points;
+  let gap = gapMs;
+  if (points.length > maxPoints && t1 > t0) {
+    const width = (t1 - t0) / maxPoints;
+    const buckets: Point[][] = Array.from({ length: maxPoints }, () => []);
+    for (const p of points) buckets[Math.min(maxPoints - 1, Math.floor((p.t - t0) / width))].push(p);
+    series = [];
+    for (const b of buckets) {
+      if (!b.length) continue; // an empty bucket becomes a gap below
+      const s = stats(b.map((p) => p.v));
+      series.push({ t: b[Math.floor(b.length / 2)].t, v: s ? s.avg : null });
+    }
+    // Neighbouring buckets can be up to two widths apart without any missing time.
+    gap = Math.max(gapMs, 2.5 * width);
+  }
   const out: Point[] = [];
-  for (let i = 0; i < maxPoints; i++) {
-    const bucket = points.slice(Math.floor((i * points.length) / maxPoints), Math.floor(((i + 1) * points.length) / maxPoints));
-    const s = stats(bucket.map((p) => p.v));
-    out.push({ t: bucket[Math.floor(bucket.length / 2)].t, v: s ? s.avg : null });
+  for (const p of series) {
+    const prev = out[out.length - 1];
+    if (prev && p.t - prev.t > gap) out.push({ t: (prev.t + p.t) / 2, v: null });
+    out.push(p);
   }
   return out;
+}
+
+/** Round axis values ("nice numbers") covering [min, max], about `count` of them. */
+export function niceTicks(min: number, max: number, count = 3): number[] {
+  const range = max - min || Math.abs(max) || 1;
+  const raw = range / Math.max(count, 1);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((st) => st >= raw * 0.999) ?? 10 * mag;
+  const ticks: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(Number(v.toFixed(10)));
+  return ticks;
 }

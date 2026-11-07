@@ -19,6 +19,7 @@ import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { endOfDay, formatRange, startOfDay, type DayRange } from '@/domain/dates';
 import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
 import { insight, insightSentence } from '@/domain/insights';
+import { STALE_AFTER_INTERVALS } from '@/domain/status';
 import { classify, METRIC_INFO, RANGES, type Metric } from '@/domain/thresholds';
 import type { Reading } from '@/domain/types';
 import { useReadingsBetween } from '@/hooks/use-devices';
@@ -132,7 +133,7 @@ export default function AnalyticsScreen() {
         )}
 
         {METRICS.map(({ metric, icon }) => (
-          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} />
+          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} intervalSec={device?.readingIntervalSec ?? 60} />
         ))}
       </ScrollView>
 
@@ -148,7 +149,7 @@ export default function AnalyticsScreen() {
   );
 }
 
-function MetricChart({ metric, icon, readings, multiDay }: { metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean }) {
+function MetricChart({ metric, icon, readings, multiDay, intervalSec }: { metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean; intervalSec: number }) {
   const theme = useTheme();
   const info = METRIC_INFO[metric];
   const points = useMemo(() => readings.map((r) => ({ t: r.serverTimeMs, v: r[metric] })), [readings, metric]);
@@ -185,7 +186,9 @@ function MetricChart({ metric, icon, readings, multiDay }: { metric: Metric; ico
         <ThemedText type="small" themeColor="textSecondary">{`No value in the newest reading · last value ${fmt(ins.latest.v)} at ${when(ins.latest.t)}`}</ThemedText>
       )}
 
-      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal} height={130} />
+      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal} height={130}
+        // Same rule as the stale status (domain/status.ts): no reading for 3 intervals = a gap.
+        gapMs={STALE_AFTER_INTERVALS * intervalSec * 1000} />
 
       <View style={[styles.insight, { backgroundColor: theme.backgroundElement }]}>
         <Icon name="insights" size={16} />
