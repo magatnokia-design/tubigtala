@@ -5,8 +5,8 @@
 //
 // Water type: fresh / tap water (decided 4 Nov 2026). pH 6.5-8.5 is the usual drinking-water
 // guideline range; temperature has no safety limit, so its range only flags unusual water.
-// Ammonia gas is an uncalibrated relative mV value; its ranges are PLACEHOLDERS until the
-// real sensor's baseline is measured (docs/wiring.md).
+// Ammonia gas is an uncalibrated relative mV value; its ranges come from the sensor's measured
+// clean-air baseline (see RANGES below and docs/data-model.md), not from a ppm calibration.
 //
 // Status words are plain on purpose ("too high", not "too basic"): they appear on the cards
 // and in alert titles, and a user should understand them without chemistry terms.
@@ -24,7 +24,9 @@ export interface Range {
 export const RANGES: Record<Metric, Range> = {
   ph: { normal: [6.5, 8.5], warning: [6.0, 9.0] },
   temperatureC: { normal: [20, 32], warning: [15, 35] },
-  nh3GasMv: { normal: [0, 600], warning: [0, 900] },
+  // From tank-01's clean-air baseline (7 Nov 2026, 10 min, enclosure above tap water): mean 1396 mV,
+  // p95 1461, max 1505 (module output). Relative to that baseline - not ppm. docs/data-model.md.
+  nh3GasMv: { normal: [0, 1700], warning: [0, 2200] },
 };
 
 export const METRIC_INFO: Record<Metric, { name: string; unit: string; decimals: number; low: [string, string]; high: [string, string] }> = {

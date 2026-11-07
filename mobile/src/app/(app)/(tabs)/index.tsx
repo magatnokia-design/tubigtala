@@ -64,17 +64,22 @@ export default function WaterScreen() {
         {devices.status === 'ready' && <DeviceSwitcher devices={devices.data} selectedId={device?.id ?? null} onSelect={select} />}
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      {/* Fills the screen: the cards share its height, so a normal phone shows all three without
+          scrolling; a very small one still scrolls instead of cutting a card off. */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} bounces={false} overScrollMode="never">
         <OfflineBanner />
-        <View style={styles.statusRow}>
-          {loading ? (
-            <ActivityIndicator color={theme.tint} />
-          ) : (
-            <StatusPill status={status} label={device ? undefined : 'No station connected'} />
-          )}
-          {device && <ThemedText type="smallBold" numberOfLines={1} style={styles.deviceName}>{device.name}</ThemedText>}
-          {reading && <ThemedText type="small" themeColor="textSecondary">· {formatAge(now - reading.serverTimeMs)}</ThemedText>}
-        </View>
+        {/* The station's status lives in Settings. Here it appears only when it matters: an old
+            reading must not look like the current water. */}
+        {loading ? (
+          <ActivityIndicator color={theme.tint} />
+        ) : !device ? (
+          <StatusPill status="no-data" label="No station connected" />
+        ) : status !== 'live' ? (
+          <View style={styles.statusRow}>
+            <StatusPill status={status} />
+            {reading && <ThemedText type="small" themeColor="textSecondary">last reading {formatAge(now - reading.serverTimeMs)}</ThemedText>}
+          </View>
+        ) : null}
 
         {loadError && <Notice tone="warning">{loadError}</Notice>}
         {/* Only when the list really loaded empty - not offline, where it is unknown. */}
@@ -123,7 +128,7 @@ export default function WaterScreen() {
           value={formatNumber(reading?.nh3GasMv ?? null, 0)}
           unit="mV"
           status={nh3}
-          note={`In the air above the water · normal ${normalRangeText('nh3GasMv')}`}
+          note={`Air above the water · normal ${normalRangeText('nh3GasMv')}`}
           dimmed={dimmed}
           tags={[{ label: 'Relative, not ppm', tone: 'info' }, ...sim]}
         />
@@ -158,9 +163,8 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   logo: { width: 40, height: 40 },
   brandText: { fontSize: 20, lineHeight: 26, fontWeight: 700 },
-  content: { padding: Spacing.three, paddingTop: HEADER_CURVE + Spacing.three, gap: Spacing.two + 2, paddingBottom: Spacing.five },
+  content: { flexGrow: 1, padding: Spacing.three, paddingTop: HEADER_CURVE + Spacing.two, gap: Spacing.two, paddingBottom: Spacing.three },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 28 },
-  deviceName: { flexShrink: 1 },
   bell: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' },
   badge: {
     position: 'absolute', top: 2, right: 0, minWidth: 22, height: 22, borderRadius: Radius.pill,

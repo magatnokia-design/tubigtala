@@ -58,6 +58,8 @@ Factory calibrated (±0.5 °C). Sanity check against a known thermometer in the 
 
 Needs 24–48 h burn-in when new and ~2–3 min warm-up after each power-on. Firmware sends `null` for `nh3GasMv` during the warm-up window (`NH3_WARMUP_MS`).
 
+Clean-air baseline on tank-01 (7 Nov 2026, enclosure above tap water): about 1400 mV at the module (840 mV at G35); the app's limits are set from it (docs/data-model.md).
+
 Without a reference gas and known conditions, its output is **relative only**. It measures ammonia gas in the air, so place it in the headspace above the water, not in the water. Never present its value as ppm or as dissolved ammonia.
 
 ## Water and power safety

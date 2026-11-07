@@ -153,7 +153,10 @@ function MetricChart({ metric, icon, readings, multiDay }: { metric: Metric; ico
   const info = METRIC_INFO[metric];
   const points = useMemo(() => readings.map((r) => ({ t: r.serverTimeMs, v: r[metric] })), [readings, metric]);
   const ins = useMemo(() => insight(metric, points), [metric, points]);
-  const status = classify(metric, ins.latest?.v ?? null);
+  // The big number and its status are the newest reading, as on the Water tab. When that reading
+  // has no value, show "—" and say when the last value was, rather than passing it off as current.
+  const status = classify(metric, ins.newest?.v ?? null);
+  const showLastValid = ins.newest?.v === null && ins.latest !== null;
   const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
   const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
 
@@ -166,7 +169,7 @@ function MetricChart({ metric, icon, readings, multiDay }: { metric: Metric; ico
       </View>
 
       <View style={styles.valueRow}>
-        <ThemedText style={styles.value}>{formatNumber(ins.latest?.v ?? null, info.decimals)}</ThemedText>
+        <ThemedText style={styles.value}>{formatNumber(ins.newest?.v ?? null, info.decimals)}</ThemedText>
         {info.unit ? <ThemedText themeColor="textSecondary" style={styles.unit}>{info.unit}</ThemedText> : null}
         <View style={styles.extremes}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.extremeText} numberOfLines={1}>
@@ -177,6 +180,10 @@ function MetricChart({ metric, icon, readings, multiDay }: { metric: Metric; ico
           </ThemedText>
         </View>
       </View>
+
+      {showLastValid && ins.latest && (
+        <ThemedText type="small" themeColor="textSecondary">{`No value in the newest reading · last value ${fmt(ins.latest.v)} at ${when(ins.latest.t)}`}</ThemedText>
+      )}
 
       <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal} height={130} />
 

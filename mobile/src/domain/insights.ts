@@ -10,6 +10,12 @@ export interface Sample {
 export interface Insight {
   /** percentage of valid readings classified "normal" (0-100), null when no data */
   normalPct: number | null;
+  /**
+   * The newest reading in the period, even when it has no value. This is "now" on a chart - the
+   * same reading the Water tab shows - so a missing value must not be covered by an older one.
+   */
+  newest: Sample | null;
+  /** the newest reading that has a value (may be older than `newest`) */
   latest: { t: number; v: number } | null;
   min: { t: number; v: number } | null;
   max: { t: number; v: number } | null;
@@ -19,8 +25,10 @@ export interface Insight {
 }
 
 export function insight(metric: Metric, samples: Sample[]): Insight {
+  const newestRaw = samples.length ? samples[samples.length - 1] : null;
+  const newest = newestRaw && { t: newestRaw.t, v: newestRaw.v !== null && Number.isFinite(newestRaw.v) ? newestRaw.v : null };
   const valid = samples.filter((s): s is { t: number; v: number } => s.v !== null && Number.isFinite(s.v));
-  if (!valid.length) return { normalPct: null, latest: null, min: null, max: null, change: null, count: 0 };
+  if (!valid.length) return { normalPct: null, newest, latest: null, min: null, max: null, change: null, count: 0 };
   let min = valid[0];
   let max = valid[0];
   let normal = 0;
@@ -31,6 +39,7 @@ export function insight(metric: Metric, samples: Sample[]): Insight {
   }
   return {
     normalPct: Math.round((normal / valid.length) * 100),
+    newest,
     latest: valid[valid.length - 1],
     min,
     max,

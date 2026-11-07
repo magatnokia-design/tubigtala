@@ -40,7 +40,7 @@ export function ScaleBar({ value, min, max, segments, labels }: {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: Spacing.one, marginTop: Spacing.two },
+  wrap: { gap: 2, marginTop: Spacing.one },
   track: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'visible' },
   marker: { position: 'absolute', top: -5, width: 20, height: 20, marginLeft: -10, borderRadius: 10, borderWidth: 3 },
   labels: { flexDirection: 'row', justifyContent: 'space-between' },

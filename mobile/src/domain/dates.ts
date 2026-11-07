@@ -4,6 +4,29 @@
 export const DAY_MS = 86_400_000;
 /** Longest range one chart or export may cover (Firestore free-tier reads; docs/runbook.md). */
 export const MAX_RANGE_DAYS = 7;
+/**
+ * First day that can be picked. Real readings started in November 2026 (the first station went
+ * live on 5 Nov), so earlier days would only ever be empty. Local midnight, 1 Nov 2026.
+ */
+export const DATA_START_DAY = new Date(2026, 10, 1).getTime();
+
+/** A day can be picked from DATA_START_DAY up to today. */
+export function isSelectableDay(day: number, today: number): boolean {
+  return day >= DATA_START_DAY && day <= today;
+}
+
+/** How the calendar shows a selection: today alone, another single day, or a range. */
+export type PickMode = 'today' | 'day' | 'range';
+
+export function pickModeOf(r: DayRange, today: number): PickMode {
+  if (r.start !== r.end) return 'range';
+  return r.start === today ? 'today' : 'day';
+}
+
+/** While choosing the end of a range: the last day allowed (MAX_RANGE_DAYS from the start, never after today). */
+export function lastPickableEnd(start: number, today: number): number {
+  return Math.min(addDays(start, MAX_RANGE_DAYS - 1), today);
+}
 
 export function startOfDay(ms: number): number {
   const d = new Date(ms);
@@ -40,15 +63,6 @@ export function monthGrid(year: number, month: number): (number | null)[][] {
 
 export type DayRange = { start: number; end: number };
 
-/**
- * Applies a tap to a range selection: the first tap picks one day; a second later tap
- * extends to a range (clamped to MAX_RANGE_DAYS); a tap before the start restarts.
- */
-export function tapDay(range: DayRange | null, day: number, picking: 'start' | 'end'): { range: DayRange; picking: 'start' | 'end' } {
-  if (!range || picking === 'start' || day < range.start) return { range: { start: day, end: day }, picking: 'end' };
-  const maxEnd = addDays(range.start, MAX_RANGE_DAYS - 1);
-  return { range: { start: range.start, end: Math.min(day, maxEnd) }, picking: 'start' };
-}
 
 export function formatDay(ms: number): string {
   return new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });

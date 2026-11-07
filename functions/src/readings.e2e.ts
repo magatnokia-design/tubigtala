@@ -36,7 +36,7 @@ async function upload(deviceId: string, values: { ph?: number | null; temperatur
   for (const v of values) {
     await db.doc(`devices/${deviceId}/readings/e2e-${seq++}`).create({
       bootId: 'e2e', seq, serverTime: FieldValue.serverTimestamp(), deviceTime: null,
-      ph: v.ph ?? 7.0, phCalibrated: v.phCalibrated ?? true, phMv: 2500, temperatureC: v.temperatureC ?? 27, nh3GasMv: 300,
+      ph: v.ph ?? 7.0, phCalibrated: v.phCalibrated ?? true, phMv: 2500, temperatureC: v.temperatureC ?? 27, nh3GasMv: 1400,
       simulated, firmware: 'e2e',
     });
     await sleep(1500);

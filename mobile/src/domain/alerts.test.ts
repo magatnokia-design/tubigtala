@@ -51,7 +51,7 @@ test('nextAlertStep: raise, update the level only, or do nothing', () => {
 test('alert title says which tank and what is wrong, in plain words', () => {
   assert.equal(alertText('ph', 'Too high', 9.4, 'Tank 1', { simulated: false, uncalibrated: false }).title, 'Tank 1: pH too high');
   assert.equal(alertText('temperatureC', 'Too hot', 36.2, 'Tank 2', { simulated: false, uncalibrated: false }).title, 'Tank 2: water too hot');
-  assert.equal(alertText('nh3GasMv', 'A bit high', 750, 'Tank 3', { simulated: false, uncalibrated: false }).title, 'Tank 3: ammonia gas a bit high');
+  assert.equal(alertText('nh3GasMv', 'A bit high', 1850, 'Tank 3', { simulated: false, uncalibrated: false }).title, 'Tank 3: ammonia gas a bit high');
 });
 
 test('alert body gives value and normal range, caveats last', () => {
@@ -61,8 +61,8 @@ test('alert body gives value and normal range, caveats last', () => {
     'pH is 5.8. Normal is 6.5 to 8.5. The pH sensor is not calibrated yet, so this may be off.');
   assert.equal(alertText('temperatureC', 'A bit cold', 18.5, 'Tank 2', { simulated: true, uncalibrated: false }).body,
     'Water is 18.5 °C. Normal is 20 to 32 °C. Test data, not a real sensor.');
-  assert.equal(alertText('nh3GasMv', 'A bit high', 750, 'Tank 3', { simulated: false, uncalibrated: false }).body,
-    'Ammonia gas above the water is 750 mV. Normal is up to 600 mV.');
+  assert.equal(alertText('nh3GasMv', 'A bit high', 1850, 'Tank 3', { simulated: false, uncalibrated: false }).body,
+    'Ammonia gas above the water is 1850 mV. Normal is up to 1700 mV.');
 });
 
 test('alert text fits the stored limits (title 80, body 200) with a 40-character tank name', () => {
@@ -77,6 +77,6 @@ test('in-app headline and detail leave out the station name', () => {
   assert.equal(alertHeadline('ph', 'Too high'), 'pH too high', 'pH keeps its lowercase p');
   assert.equal(alertHeadline('nh3GasMv', 'Too high'), 'Ammonia gas too high');
   assert.equal(alertDetail('temperatureC', 33.4), '33.4 °C · normal 20 to 32 °C');
-  assert.equal(alertDetail('nh3GasMv', 3586), '3586 mV · normal up to 600 mV');
+  assert.equal(alertDetail('nh3GasMv', 3586), '3586 mV · normal up to 1700 mV');
   assert.equal(alertDetail('ph', null), '— · normal 6.5 to 8.5', 'missing value is a dash, never 0');
 });
