@@ -36,6 +36,8 @@ pH and MQ-137 boards powered at 5 V can output up to ~5 V. Before wiring to the 
 
 ### pH (two-point, neutral and acid buffer) - done in the app, no re-flashing
 
+**pH on/off (firmware 0.2.5+):** `PH_ENABLED` in `firmware/tubigtala/config.h`. With 0, every reading uploads `ph` and `phMv` as null, because a G34 with no pH board still reads a small voltage that would look like a measurement (`diag` prints "pH DISABLED"). Since 7 Nov 2026 it is 0: the first PH-4502C was returned (its output stayed near 4.2-5 V even with the input shorted, and the zero trimmer could not bring it to 2.5 V). For the new board: wire it (same pins), use `pins` (it still shows G34 while disabled) to set the zero to about 1500 mV at the pin with the BNC centre properly shorted to its shell, then set `PH_ENABLED 1`, re-flash, soak the probe and calibrate.
+
 Buffers: either a **7.00 / 4.00** kit or the common **6.86 / 4.01 / 9.18** powder kit (the 9.18 is not needed). Powder sachets: dissolve one in 250 mL distilled water in a clean container; label it. The app uses the buffer's **true** value: treating 6.86 as 7.00 would shift every reading by about 0.15-0.25 pH. Values are as printed for 25 °C; buffer temperature effects are not corrected.
 
 Probe care (from the probe's manual): before first use, or after long storage, soak the bulb and junction for 8 hours in 3 mol/L KCl storage solution, or in the pH 4.01 buffer if there is no KCl. Store it the same way; never dry and never in distilled water. If the probe has a fill hole, slide its rubber sleeve off while measuring.
