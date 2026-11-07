@@ -76,7 +76,7 @@ void putOrNull(JsonDocument& doc, const char* key, float v, int decimals) {
 
 void takeReading() {
   float temperatureC = readTemperatureC();
-  float phMv = readModuleMv(PIN_PH, PH_DIVIDER_RATIO);
+  float phMv = PH_ENABLED ? readModuleMv(PIN_PH, PH_DIVIDER_RATIO) : NAN;  // null while no board is fitted
   float ph = phFromMv(phMv);
   float nh3GasMv = millis() < NH3_WARMUP_MS ? NAN : readModuleMv(PIN_NH3, NH3_DIVIDER_RATIO);
 
@@ -176,8 +176,12 @@ void printDiag() {
 
   Serial.print("pH:     G34 ");
   printPin(PIN_PH, PH_DIVIDER_RATIO);
-  float ph = phFromMv(readModuleMv(PIN_PH, PH_DIVIDER_RATIO));
-  if (!isnan(ph)) Serial.printf(" -> pH %.2f%s", ph, cal.calibrated ? "" : " (uncalibrated)");
+  if (!PH_ENABLED) {
+    Serial.print(" - pH DISABLED (PH_ENABLED 0): uploads no reading");
+  } else {
+    float ph = phFromMv(readModuleMv(PIN_PH, PH_DIVIDER_RATIO));
+    if (!isnan(ph)) Serial.printf(" -> pH %.2f%s", ph, cal.calibrated ? "" : " (uncalibrated)");
+  }
   Serial.println();
 
   Serial.print("Gas:    G35 ");
@@ -231,6 +235,7 @@ void pollSerial() {
     lastPinsMs = millis();
     Serial.print("G34 pH ");
     printPin(PIN_PH, PH_DIVIDER_RATIO);
+    if (!PH_ENABLED) Serial.print(" (not uploaded)");
     Serial.print(" | G35 gas ");
     printPin(PIN_NH3, NH3_DIVIDER_RATIO);
     Serial.println();
