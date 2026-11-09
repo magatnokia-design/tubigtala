@@ -58,7 +58,7 @@ Scan the QR code with Expo Go. The app finds the emulators on the PC's IP automa
 
 ## APK builds (GitHub Actions)
 
-`.github/workflows/build-apk.yml`, manual only: GitHub > Actions > Build APK > Run workflow (or `gh workflow run build-apk.yml -f version=0.1.0`). The APK appears as a run artifact; tick "publish release" to also attach it to a GitHub Release. Free on this public repo.
+`.github/workflows/build-apk.yml` (**kept off the public repo since 9 Nov 2026**; it lives only on the dev PC. To build: copy it back into `.github/workflows/`, commit it on a branch merged to `main`, build, then remove it again), manual only: GitHub > Actions > Build APK > Run workflow (or `gh workflow run build-apk.yml -f version=0.1.0`). The APK appears as a run artifact; tick "publish release" to also attach it to a GitHub Release. Free on this public repo.
 
 It needs, in the GitHub repo settings (Secrets and variables > Actions):
 
