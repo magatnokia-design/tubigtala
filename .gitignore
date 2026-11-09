@@ -46,6 +46,10 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Kept on this PC only, not published (removed from the repo 9 Nov 2026 for sharing):
+# Claude Code settings, and the GitHub Actions APK workflow (re-add .github/ temporarily to build)
+.claude/
+.github/
 # Claude Code per-user settings
 .claude/settings.local.json
 
