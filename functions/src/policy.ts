@@ -1,4 +1,4 @@
-// Delivery policy for SMS and email (docs/data-model.md, "Alert policy"). Pure functions only,
+// Delivery policy for SMS (docs/data-model.md, "Alert policy"). No email: dropped 13 Nov 2026. Pure functions only,
 // so every rule here is unit-tested without Firebase. Which readings are normal/warning/critical
 // is NOT decided here: that is mobile/src/domain/thresholds.ts, shared with the app.
 import { formatNumber } from '../../mobile/src/domain/format.ts';
@@ -58,12 +58,6 @@ export function manilaClock(ms: number): string {
     .format(ms).replace(/\s+/g, ' ');
 }
 
-/** "4 Nov 2026, 3:42 PM" in Philippine time. */
-export function manilaDateTime(ms: number): string {
-  const date = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', day: 'numeric', month: 'short', year: 'numeric' }).format(ms);
-  return `${date}, ${manilaClock(ms)}`;
-}
-
 export interface SmsItem {
   metric: Metric;
   /** status word from classify(), e.g. "Too high" */
@@ -91,42 +85,7 @@ export function smsText(deviceName: string, items: SmsItem[], atMs: number): str
   return `TubigTala: ${gsmSafe(deviceName) || 'device'} ${parts.join('; ')} at ${manilaClock(atMs)}`;
 }
 
-export interface EmailAlert {
-  title: string;
-  body: string;
-}
-
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-
-const DISCLAIMER = 'TubigTala is a prototype. Its sensors are not a laboratory test and cannot certify that water is safe to drink.';
-
-/** One email for all alerts raised by one reading. Simulated data is marked in the subject. */
-export function emailContent(deviceName: string, alerts: EmailAlert[], atMs: number, simulated: boolean) {
-  const subject = `${simulated ? '[Test data] ' : ''}${alerts.length === 1 ? alerts[0].title : `${deviceName}: ${alerts.length} alerts`}`;
-  const when = `${manilaDateTime(atMs)} (Philippine time)`;
-  const text = [
-    ...alerts.map((a) => `- ${a.title}\n  ${a.body}`),
-    '',
-    `Reading time: ${when}`,
-    'Open the TubigTala app for the latest readings.',
-    '',
-    DISCLAIMER,
-  ].join('\n');
-  const html = [
-    ...alerts.map((a) => `<p><strong>${escapeHtml(a.title)}</strong><br>${escapeHtml(a.body)}</p>`),
-    `<p>Reading time: ${escapeHtml(when)}<br>Open the TubigTala app for the latest readings.</p>`,
-    `<p style="color:#5b6b77;font-size:12px">${escapeHtml(DISCLAIMER)}</p>`,
-  ].join('\n');
-  return { subject, text, html };
-}
-
 /** "+63917*****67": enough to tell numbers apart in logs without exposing them (CLAUDE.md). */
 export function maskPhone(phone: string): string {
   return phone.length > 7 ? `${phone.slice(0, 6)}${'*'.repeat(phone.length - 8)}${phone.slice(-2)}` : '***';
-}
-
-/** "j***@gmail.com" */
-export function maskEmail(email: string): string {
-  const at = email.indexOf('@');
-  return at > 0 ? `${email[0]}***${email.slice(at)}` : '***';
 }

@@ -17,12 +17,12 @@ devices/{deviceId}/readings/{readingId}      one sample from that unit
 Server-only (written by Cloud Functions with firebase-admin; no app account can read or write them, tested in `devtools/rules.test.mjs`):
 
 ```
-alertDeliveries/{id}   one email or SMS: email_{uid}_{deviceId}_{readingId} or sms_{uid}_{deviceId}_{metric}_{alertedAtMs}
+alertDeliveries/{id}   one SMS: sms_{uid}_{deviceId}_{metric}_{alertedAtMs} (email_… records may exist from before 13 Nov 2026)
 smsBudget/global       SMS counted per Philippine day and month, for the caps
 devicePairing/{deviceId}  { code }: the station's secret pairing code, set by an admin (devtools pair-code); only the rules read it
 ```
 
-`alertDeliveries` fields: `channel` (`email`/`sms`), `uid`, `deviceId`, `readingId`, `metric` (SMS), `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
+`alertDeliveries` fields: `channel` (`sms`; `email` only in records from before 13 Nov 2026), `uid`, `deviceId`, `readingId`, `metric`, `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
 
 ### `users/{uid}`
 
@@ -70,20 +70,20 @@ Water type: **fresh / tap water** (decided 4 Nov 2026). `mobile/src/domain/thres
 
 pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no safety limit for tap water; its range only flags unusual water. **Ammonia gas ranges** come from tank-01's clean-air baseline (7 Nov 2026, 10 min of `pins` in the enclosure above tap water, after burn-in): mean 1396 mV, p95 1461, max 1505 (module output). Normal leaves ~300 mV above the baseline; they are relative to this sensor, not ppm. Re-record the baseline if the sensor or enclosure changes, and adjust. Status words are plain on purpose ("too high", not "too basic").
 
-### Alert policy for SMS and email
+### Alert policy: phone notifications and SMS
 
-Decided 4 Nov 2026. **Built for reading alerts in `functions/` and tested on the emulator; not deployed** (needs Blaze), and SMS/email go to log-only providers until TextBee/Brevo are added. Not built yet: push from the server (the app does not store push tokens yet), the offline / sensor-not-reading checks, the "SMS limit reached" notice in the app, and an email on/off switch (the server treats a missing `emailAlertsEnabled` as on). The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/` and tested on the emulator; not deployed** (needs Blaze), and SMS goes to a log-only provider until TextBee is added. Not built yet: push from the server (the app does not store push tokens yet), the offline / sensor-not-reading checks, and the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
 
-| Event | Push | Email | SMS |
-|---|---|---|---|
-| pH or temperature warning | yes | yes | no |
-| pH or temperature critical | yes | yes | yes, after 3 critical readings in a row; pH only when calibrated |
-| Ammonia gas warning or critical | yes | yes | no (relative reading, not ppm - SMS kept for pH and temperature) |
-| A sensor sends no value for 10 min (gas: after warm-up) | yes | yes | no |
-| Device offline (no readings for 30 min) / back online | yes | yes | no |
-| SMS monthly limit reached | yes | yes | no |
+| Event | Push | SMS |
+|---|---|---|
+| pH or temperature warning | yes | no |
+| pH or temperature critical | yes | yes, after 3 critical readings in a row; pH only when calibrated |
+| Ammonia gas warning or critical | yes | no (relative reading, not ppm - SMS kept for pH and temperature) |
+| A sensor sends no value for 10 min (gas: after warm-up) | yes | no |
+| Device offline (no readings for 30 min) / back online | yes | no |
+| SMS monthly limit reached | yes | no |
 
-SMS rules: one SMS per ongoing condition (same cooldown as above); conditions on the same device within a few minutes go in one SMS; at most 5 per day and 250 per month across all devices (50 kept for testing), counted per recipient; past a cap, alerts still go by push and email and the app shows that the SMS limit was reached. SMS text uses no symbols such as "°" (they switch the SMS to a format that fits fewer than half as many characters), e.g. `TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM`. Check how TextBee counts multi-part SMS against the 300 before building. Email carries the reading, normal range, time, the last hour's trend and a note that this is a prototype sensor, not a lab test.
+SMS rules: one SMS per ongoing condition (same cooldown as above); conditions on the same device within a few minutes go in one SMS; at most 5 per day and 250 per month across all devices (50 kept for testing), counted per recipient; past a cap, alerts still go by push and the app shows that the SMS limit was reached. SMS text uses no symbols such as "°" (they switch the SMS to a format that fits fewer than half as many characters), e.g. `TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM`. Check how TextBee counts multi-part SMS against the 300 before building. The TextBee account and phone are also used by another project (Smilebook), which counts against the same monthly limit - lower `SMS_MONTH_CAP` (`functions/src/policy.ts`) by what that project sends.
 
 ### `devices/{deviceId}`
 

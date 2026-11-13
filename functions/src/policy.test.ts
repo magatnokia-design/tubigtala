@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  emailContent, isCriticalStreak, manilaClock, manilaKeys, maskEmail, maskPhone, reserveSms, smsMetricAllowed, smsText,
+  isCriticalStreak, manilaClock, manilaKeys, maskPhone, reserveSms, smsMetricAllowed, smsText,
   SMS_DAY_CAP, SMS_MONTH_CAP,
 } from './policy.ts';
 
@@ -53,17 +53,6 @@ test('SMS text: plain GSM characters, one text, all critical fields', () => {
   assert.match(long, /^[A-Za-z0-9 .,:;()'!?#&+\-_/]+$/, 'only GSM-safe characters');
 });
 
-test('email: one alert uses its title as subject; test data is marked; disclaimer always present', () => {
-  const one = emailContent('Tank 1', [{ title: 'Tank 1: pH too high', body: 'pH is 9.4. Normal is 6.5 to 8.5.' }], T, false);
-  assert.equal(one.subject, 'Tank 1: pH too high');
-  assert.match(one.text, /Reading time: 4 Nov 2026, 3:42 PM \(Philippine time\)/);
-  assert.match(one.text, /not a laboratory test/);
-  const two = emailContent('Tank 1', [{ title: 'a', body: 'b' }, { title: 'c', body: '<script>' }], T, true);
-  assert.equal(two.subject, '[Test data] Tank 1: 2 alerts');
-  assert.ok(two.html.includes('&lt;script&gt;') && !two.html.includes('<script>'), 'HTML is escaped');
-});
-
-test('logs never show full phone numbers or emails', () => {
+test('logs never show full phone numbers', () => {
   assert.equal(maskPhone('+639171234567'), '+63917*****67');
-  assert.equal(maskEmail('juan@gmail.com'), 'j***@gmail.com');
 });

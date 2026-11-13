@@ -18,8 +18,9 @@ Rough Firestore usage: one board at one reading a minute writes ~1,440 readings 
 | When | Service | Cost model | Before enabling |
 |---|---|---|---|
 | Server-side alerts (app closed) | Firebase **Blaze** + Cloud Functions | Pay as you go above a free monthly allowance | Set a **budget alert**: Google Cloud console > Billing > Budgets & alerts, scoped to `tubigtala-64d9e`. A budget alert only emails; it does not stop charges. |
-| SMS alerts | TextBee + the gateway phone's SIM | SIM load per SMS | Test with mocked sends first (CLAUDE.md) |
-| Email alerts | Brevo | Free daily quota, then paid | Use TubigTala's own Brevo account/key, not Dagitab's |
+| SMS alerts | TextBee + the gateway phone's SIM | SIM load per SMS | Test with mocked sends first (CLAUDE.md). The TextBee account/phone is shared with another project (Smilebook): one monthly limit for both. |
+
+No email alerts (dropped 13 Nov 2026), so there is no Brevo account or sender domain to pay for.
 
 ## Keep these before shutting anything down
 
