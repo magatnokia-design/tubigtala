@@ -105,6 +105,26 @@ arduino-cli compile --fqbn esp32:esp32:esp32 --build-path C:\App\TubigTala\.ardu
 
 Never use Dagitab's build folder. Before any **upload**: unplug Dagitab's Hub, run `arduino-cli board list`, confirm the port, and pass `--input-dir C:\App\TubigTala\.arduino-build`.
 
+## Landing page (website/) and APK downloads
+
+`website/` is a static landing page (React + Vite, no login, no data) that describes the app and links to the APK. It imports the app's design tokens (`mobile/src/constants/tokens.ts`) and logos (`mobile/assets/brand/`), so a colour changed there changes both.
+
+```powershell
+cd website; npm install
+npm run dev        # http://localhost:5173
+npm run build      # typecheck + build to website\dist
+```
+
+**Hosting: Vercel** (the user's account, connected once in the dashboard): Add New > Project > import `magatnokia-design/tubigtala` > **Root Directory `website`** (framework Vite, defaults). Keep "Include files outside the root directory in the Build Step" on - the site reads `../mobile`. Every merge to `main` redeploys.
+
+**APK download:** the button links to `https://github.com/magatnokia-design/tubigtala/releases/latest/download/TubigTala.apk`. Every GitHub Release must therefore carry the APK under the fixed name **`TubigTala.apk`** (plus a versioned copy), and be marked latest:
+
+```powershell
+gh release create v0.9.0 TubigTala.apk TubigTala-v0.9.0.apk --target <commit the APK was built from> --title "TubigTala 0.9.0" --notes-file notes.md --latest
+```
+
+Then update `APP_VERSION` in `website/src/content.ts`. v0.8.0 published 13 Nov 2026 (built from `b6d8a32`). The APK is too big (65 MB) to host on Vercel itself.
+
 ## Symptoms
 
 | Symptom | Check |
