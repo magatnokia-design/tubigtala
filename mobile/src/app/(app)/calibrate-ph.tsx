@@ -63,8 +63,9 @@ export default function CalibratePhScreen() {
   if (stepAfter === null && history.status === 'ready') setStepAfter(latest?.serverTimeMs ?? 0);
   const stepReadings = stepAfter === null ? [] : readings.filter((r) => r.serverTimeMs > stepAfter);
   const stepMvs = stepReadings.map((r) => r.phMv);
-  // Readings arrive but none carries a pH voltage: the pH board is missing, switched off in the
-  // firmware (PH_ENABLED 0), or clipping. Different from simply waiting for the next reading.
+  // Readings arrive but none carries a pH voltage: the pH board is missing or not detected
+  // (firmware 0.3.0+: below 600 mV), switched off (PH_ENABLED 0), or clipping. Different from
+  // simply waiting for the next reading.
   const noPhVoltage = stepReadings.length > 0 && stepReadings.every((r) => r.phMv === null);
   const s = stability(stepMvs);
   const cal = device?.phCalibration;
