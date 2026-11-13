@@ -214,7 +214,7 @@ h1 { font-size: clamp(36px, 6vw, 56px); letter-spacing: -0.02em; }
 
 /* ---------- What the app does: intro beside one panel of rows ---------- */
 .features-layout { display: grid; grid-template-columns: 0.8fr 1.6fr; gap: var(--space-5); align-items: start; }
-.features-intro { position: sticky; top: 90px; }
+.features-intro { padding-top: var(--space-3); } /* scrolls with the page (sticky looked like a bug) */
 .features-intro .kicker, .features-intro h2 { text-align: left; }
 .features-intro h2 { margin-bottom: var(--space-3); }
 .feature-list {
@@ -232,7 +232,7 @@ h1 { font-size: clamp(36px, 6vw, 56px); letter-spacing: -0.02em; }
 }
 @media (max-width: 860px) {
   .features-layout { grid-template-columns: 1fr; gap: var(--space-4); }
-  .features-intro { position: static; text-align: center; }
+  .features-intro { padding-top: 0; text-align: center; }
   .features-intro .kicker, .features-intro h2 { text-align: center; }
 }
 @media (max-width: 620px) {
