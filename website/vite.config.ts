@@ -6,5 +6,10 @@ import react from '@vitejs/plugin-react';
 // outside the root directory in the Build Step" on (the default).
 export default defineConfig({
   plugins: [react()],
+  // Use THIS tsconfig for every file, including ../mobile/src/constants/tokens.ts. Otherwise Vite
+  // reads mobile/tsconfig.json for that file, which extends "expo/tsconfig.base" - only installed
+  // when mobile/node_modules exists. On Vercel it does not, and the build failed with
+  // "Tsconfig not found expo/tsconfig.base" (first deploy, 13 Nov 2026).
+  tsconfig: './tsconfig.json',
   server: { fs: { allow: ['..'] } },
 });
