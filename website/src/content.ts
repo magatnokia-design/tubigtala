@@ -1,10 +1,11 @@
 // Everything the page says, in one place. Claims must match what the project really does
 // (CLAUDE.md): a prototype, ammonia measured as gas in the air, no drinking-water certification.
 
-export const REPO_URL = 'https://github.com/magatnokia-design/tubigtala';
-/** Stable name: each GitHub Release also carries the APK as TubigTala.apk, so this always gets the newest. */
-export const APK_URL = `${REPO_URL}/releases/latest/download/TubigTala.apk`;
-export const RELEASES_URL = `${REPO_URL}/releases`;
+/**
+ * The APK is hosted on GitHub Releases (too big for Vercel). Each release carries it as
+ * TubigTala.apk, so this always gets the newest. The page links only to the file itself.
+ */
+export const APK_URL = 'https://github.com/magatnokia-design/tubigtala/releases/latest/download/TubigTala.apk';
 export const APP_VERSION = '0.8.0';
 
 export const steps = [
@@ -23,14 +24,30 @@ export const features = [
   { icon: 'water_ph', title: 'pH calibration', text: 'Calibrate the pH probe in the app with your buffer solutions (6.86 and 4.01), step by step.' },
 ];
 
+/**
+ * Gauges use the app's own scale colours and normal ranges (mobile/src/domain/thresholds.ts):
+ * the bar runs min..max, the bright window is the normal range.
+ */
 export const sensors = [
-  { icon: 'device_thermostat', name: 'Temperature', part: 'DS18B20 waterproof probe', normal: 'Normal 20 to 32 °C', note: 'In the water.' },
-  { icon: 'water_ph', name: 'pH level', part: 'PH-4502C board and glass probe', normal: 'Normal 6.5 to 8.5', note: 'In the water. Calibrated with buffer solutions.' },
-  { icon: 'air', name: 'Ammonia gas', part: 'MQ-137 gas sensor', normal: 'Normal up to 1700 mV', note: 'In the air above the water: a relative reading, not ppm.' },
-];
+  {
+    icon: 'device_thermostat', name: 'Temperature', part: 'DS18B20 waterproof probe', where: 'In the water',
+    normal: '20 – 32 °C', min: 0, max: 40, lo: 20, hi: 32, ticks: ['0 °C', '40 °C'], gradient: ['scaleCool', 'scaleNeutral', 'scaleWarm'],
+    note: 'Flags water that is unusually cold or warm.',
+  },
+  {
+    icon: 'water_ph', name: 'pH level', part: 'PH-4502C board and glass probe', where: 'In the water',
+    normal: '6.5 – 8.5', min: 0, max: 14, lo: 6.5, hi: 8.5, ticks: ['0 acidic', '14 basic'], gradient: ['scaleAcid', 'scaleNeutral', 'scaleBase'],
+    note: 'Calibrated in the app with 6.86 and 4.01 buffer solutions.',
+  },
+  {
+    icon: 'air', name: 'Ammonia gas', part: 'MQ-137 gas sensor', where: 'Above the water',
+    normal: 'up to 1700 mV', min: 0, max: 3000, lo: 0, hi: 1700, ticks: ['0 mV', '3000 mV'], gradient: ['scaleNeutral', 'scaleWarm', 'levelCritical'],
+    note: 'Gas in the air over the tank - a relative reading, not ppm.',
+  },
+] as const;
 
 export const installSteps = [
-  'Tap Download for Android on your phone. The file is TubigTala.apk.',
+  'Tap Download for Android on your phone. The file is TubigTala.apk (about 65 MB).',
   'Open it. If Android asks, allow your browser to "Install unknown apps".',
   'If Play Protect warns about an unknown app, choose to install anyway - TubigTala is not on the Play Store yet.',
   'Open TubigTala, create your account, and scan the QR sticker on your station.',
