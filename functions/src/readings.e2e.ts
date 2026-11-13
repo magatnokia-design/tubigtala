@@ -56,7 +56,7 @@ before(async () => {
   });
 });
 
-test('critical temperature: one alert, one email, one SMS after 3 readings, none repeated', async () => {
+test('critical temperature: one alert, one SMS after 3 readings, none repeated, no email', async () => {
   await addDevice('e2e-real', false);
   await upload('e2e-real', [{ temperatureC: 40 }, { temperatureC: 40 }]);
   await sleep(2000);
@@ -75,27 +75,25 @@ test('critical temperature: one alert, one email, one SMS after 3 readings, none
   const alerts = await alertsFor('e2e-real', 'temperatureC');
   assert.equal(alerts.length, 1, 'one alert for one ongoing condition');
   assert.equal(alerts[0].title, 'e2e-real: water too hot');
-  const emails = await deliveries('e2e-real', 'email');
-  assert.equal(emails.length, 1, 'one email, for the reading that raised the alert');
-  assert.equal(emails[0].status, 'sent');
+  assert.equal((await deliveries('e2e-real', 'email')).length, 0, 'email alerts were dropped (13 Nov 2026)');
   const budget = (await db.doc('smsBudget/global').get()).data();
   assert.equal(budget?.dayCount, 1);
 });
 
-test('simulated device: alert and email, never an SMS', async () => {
+test('simulated device: alert, never an SMS', async () => {
   await addDevice('e2e-sim', true);
   await upload('e2e-sim', [{ temperatureC: 40 }, { temperatureC: 40 }, { temperatureC: 40 }], true);
-  await until('email delivery', async () => ((await deliveries('e2e-sim', 'email')).length ? true : undefined));
+  await until('in-app alert', async () => ((await alertsFor('e2e-sim', 'temperatureC')).length ? true : undefined));
   await sleep(3000);
   assert.equal((await alertsFor('e2e-sim', 'temperatureC')).length, 1);
   assert.match((await alertsFor('e2e-sim', 'temperatureC'))[0].body, /Test data, not a real sensor\./);
   assert.equal((await deliveries('e2e-sim', 'sms')).length, 0);
 });
 
-test('uncalibrated critical pH: alert and email, no SMS', async () => {
+test('uncalibrated critical pH: alert, no SMS', async () => {
   await addDevice('e2e-ph', false);
   await upload('e2e-ph', [{ ph: 9.6, phCalibrated: false }, { ph: 9.6, phCalibrated: false }, { ph: 9.7, phCalibrated: false }]);
-  await until('email delivery', async () => ((await deliveries('e2e-ph', 'email')).length ? true : undefined));
+  await until('in-app alert', async () => ((await alertsFor('e2e-ph', 'ph')).length ? true : undefined));
   await sleep(3000);
   const alerts = await alertsFor('e2e-ph', 'ph');
   assert.equal(alerts.length, 1);

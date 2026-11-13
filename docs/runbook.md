@@ -80,15 +80,15 @@ The APK always uses the **real** project: an installed app cannot reach the emul
 ```powershell
 cd devtools;  npm run test:rules     # Firestore Security Rules (starts and stops its own emulator)
 cd mobile;    npm test               # status / formatting / alert logic
-cd functions; npm test               # SMS/email policy: caps, streak, message text
-cd functions; npm run test:e2e       # builds, starts auth+firestore+functions emulators, uploads readings, checks alerts/email/SMS records
+cd functions; npm test               # SMS policy: caps, streak, message text
+cd functions; npm run test:e2e       # builds, starts auth+firestore+functions emulators, uploads readings, checks alerts/SMS records
 ```
 
 ## Cloud Functions (alert backend)
 
-`functions\` holds the backend that raises alerts and sends email/SMS for every uploaded reading (`onReadingCreated`, region `asia-southeast1`; policy in `docs/data-model.md`, "Alert policy"). It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
+`functions\` holds the backend that raises alerts and sends SMS for every uploaded reading (`onReadingCreated`, region `asia-southeast1`; policy in `docs/data-model.md`, "Alert policy"). It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
 
-Status (4 Nov 2026): runs on the emulator only. Deploying needs the Blaze plan. SMS and email go to **log providers** that print what would be sent (recipients masked) and send nothing; real TextBee/Brevo senders, push, and offline checks are not built yet.
+Status (13 Nov 2026): runs on the emulator only. Deploying needs the Blaze plan. SMS goes to a **log provider** that prints what would be sent (recipient masked) and sends nothing; the real TextBee sender, server push, and offline checks are not built yet. Email alerts were dropped on 13 Nov 2026 (phone notifications + SMS only).
 
 **Deploy caution.** Now that `firebase.json` has a `functions` section, a plain `firebase deploy` also tries to deploy functions (and fails on Spark). Deploy rules on their own:
 
