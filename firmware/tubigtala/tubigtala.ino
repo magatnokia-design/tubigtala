@@ -38,14 +38,24 @@ float readTemperatureC() {
   return t;
 }
 
-// Averaged voltage at the ESP32 pin in mV (after the divider), not validated.
+// Voltage at the ESP32 pin in mV (after the divider), not validated. Trimmed mean: the highest
+// and lowest quarter of the samples are dropped, so a single spike does not move the reading.
 float readPinMv(uint8_t pin) {
-  uint32_t sum = 0;
+  uint16_t s[ADC_SAMPLES];
   for (int i = 0; i < ADC_SAMPLES; i++) {
-    sum += analogReadMilliVolts(pin);
+    s[i] = analogReadMilliVolts(pin);
     delay(2);
   }
-  return (float)sum / ADC_SAMPLES;
+  for (int i = 1; i < ADC_SAMPLES; i++) {  // insertion sort, 32 values
+    uint16_t v = s[i];
+    int j = i - 1;
+    while (j >= 0 && s[j] > v) { s[j + 1] = s[j]; j--; }
+    s[j + 1] = v;
+  }
+  uint32_t sum = 0;
+  const int from = ADC_SAMPLES / 4, to = ADC_SAMPLES - ADC_SAMPLES / 4;
+  for (int i = from; i < to; i++) sum += s[i];
+  return (float)sum / (to - from);
 }
 
 // Averaged module output voltage in mV, undoing the divider.
@@ -55,6 +65,24 @@ float readModuleMv(uint8_t pin, float dividerRatio) {
   float moduleMv = pinMv / dividerRatio;
   if (moduleMv < 0 || moduleMv > MODULE_MV_MAX) return NAN;
   return moduleMv;
+}
+
+// pH board output in mV, or NAN when pH is off, the board is not detected (G34 below
+// PH_BOARD_MIN_MV at the board side) or the pin is clipped.
+float readPhMv() {
+  if (!PH_ENABLED) return NAN;
+  float mv = readModuleMv(PIN_PH, PH_DIVIDER_RATIO);
+  if (isnan(mv) || mv < PH_BOARD_MIN_MV) return NAN;
+  return mv;
+}
+
+// Why readPhMv() gives no value, for diag/pins; "" when it gives one.
+const char* phProblem() {
+  if (!PH_ENABLED) return "pH OFF (PH_ENABLED 0): uploads no reading";
+  float pinMv = readPinMv(PIN_PH);
+  if (pinMv >= ADC_SATURATED_MV) return "CLIPPED: board output too high - turn the zero trimmer, check the divider";
+  if (pinMv / PH_DIVIDER_RATIO < PH_BOARD_MIN_MV) return "pH board NOT DETECTED: uploads no reading (plug in Po, V+ 5 V, G)";
+  return "";
 }
 
 // Two-point linear fit through (ph7Mv, ph7Buffer) and (ph4Mv, ph4Buffer), using the buffers'
@@ -76,7 +104,7 @@ void putOrNull(JsonDocument& doc, const char* key, float v, int decimals) {
 
 void takeReading() {
   float temperatureC = readTemperatureC();
-  float phMv = PH_ENABLED ? readModuleMv(PIN_PH, PH_DIVIDER_RATIO) : NAN;  // null while no board is fitted
+  float phMv = readPhMv();  // null while no pH board is detected
   float ph = phFromMv(phMv);
   float nh3GasMv = millis() < NH3_WARMUP_MS ? NAN : readModuleMv(PIN_NH3, NH3_DIVIDER_RATIO);
 
@@ -176,11 +204,13 @@ void printDiag() {
 
   Serial.print("pH:     G34 ");
   printPin(PIN_PH, PH_DIVIDER_RATIO);
-  if (!PH_ENABLED) {
-    Serial.print(" - pH DISABLED (PH_ENABLED 0): uploads no reading");
+  const char* problem = phProblem();
+  if (*problem) {
+    Serial.printf(" - %s", problem);
   } else {
-    float ph = phFromMv(readModuleMv(PIN_PH, PH_DIVIDER_RATIO));
+    float ph = phFromMv(readPhMv());
     if (!isnan(ph)) Serial.printf(" -> pH %.2f%s", ph, cal.calibrated ? "" : " (uncalibrated)");
+    else Serial.print(" -> outside pH 0-14 with this calibration");
   }
   Serial.println();
 
@@ -235,7 +265,8 @@ void pollSerial() {
     lastPinsMs = millis();
     Serial.print("G34 pH ");
     printPin(PIN_PH, PH_DIVIDER_RATIO);
-    if (!PH_ENABLED) Serial.print(" (not uploaded)");
+    if (!PH_ENABLED) Serial.print(" (pH off)");
+    else if (readPinMv(PIN_PH) / PH_DIVIDER_RATIO < PH_BOARD_MIN_MV) Serial.print(" (no pH board)");
     Serial.print(" | G35 gas ");
     printPin(PIN_NH3, NH3_DIVIDER_RATIO);
     Serial.println();

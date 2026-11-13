@@ -2,24 +2,27 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.2.5"
+#define FIRMWARE_VERSION "0.3.0"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V
 #define PIN_PH 34       // (unverified) via divider
 #define PIN_NH3 35      // (unverified) via divider
 
-// pH on/off. 0 = no pH board fitted: every reading uploads ph and phMv as null ("no reading"),
-// because an unconnected G34 still reads a small voltage (~237 mV at the board side) that would
-// look like a real measurement. `pins` still shows G34, for setting a new board's zero first.
-// 7 Nov 2026: 0 - the faulty PH-4502C was returned; set 1 once the new board is wired.
-#define PH_ENABLED 0
+// pH on/off. 1 = on, with board detection (below). 0 = always upload ph and phMv as null.
+#define PH_ENABLED 1
+// pH board detection (0.3.0, plug and play): an unconnected G34 still reads a small voltage
+// (~237 mV at the board side, measured 7 Nov 2026), which would look like a real measurement.
+// A powered PH-4502C outputs ~1-4.5 V (pH 7 is ~2.5 V), so below this the board is treated as
+// not connected and ph/phMv upload as null. No re-flash needed when the board is plugged in.
+#define PH_BOARD_MIN_MV 600.0f
 
 // Must match devices/{deviceId}.readingIntervalSec (docs/data-model.md)
 #define READING_INTERVAL_MS 60000UL
 
 // ADC
-#define ADC_SAMPLES 16
+// Samples per reading; the highest and lowest quarter are dropped (spikes), the rest averaged.
+#define ADC_SAMPLES 32
 #define ADC_SATURATED_MV 3100  // at 11 dB attenuation the ESP32 ADC clips above ~3.1 V
 
 // Divider ratio = bottom / (top + bottom). Firmware divides by this to report module output.
