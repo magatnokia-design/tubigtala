@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 
 import logoSymbol from '../../mobile/assets/brand/logo-symbol.svg';
 import logoMark from '../../mobile/assets/brand/logo-mark.svg';
-import {
-  APK_URL, APP_VERSION, DISCLAIMER, features, installSteps, RELEASES_URL, REPO_URL, sensors, steps,
-} from './content';
+import { APK_URL, APP_VERSION, DISCLAIMER, features, installSteps, sensors, steps } from './content';
 
 const Icon = ({ name }: { name: string }) => <span className="icon" aria-hidden="true">{name}</span>;
 
@@ -58,6 +56,22 @@ function PhoneMock() {
   );
 }
 
+/** The app's gauge: scale colours along min..max, the normal range as a bright window. */
+function Gauge({ s }: { s: (typeof sensors)[number] }) {
+  const pct = (v: number) => ((v - s.min) / (s.max - s.min)) * 100;
+  const colours = s.gradient.map((c) => `var(--${c})`).join(', ');
+  return (
+    <div className="gauge">
+      <div className="gauge-track" style={{ background: `linear-gradient(90deg, ${colours})` }}>
+        <div className="gauge-normal" style={{ left: `${pct(s.lo)}%`, width: `${pct(s.hi) - pct(s.lo)}%` }}>
+          <span>Normal</span>
+        </div>
+      </div>
+      <div className="gauge-ticks"><span>{s.ticks[0]}</span><span>{s.ticks[1]}</span></div>
+    </div>
+  );
+}
+
 function DownloadButton({ light = false }: { light?: boolean }) {
   return (
     <a className={`button${light ? ' button-light' : ''}`} href={APK_URL}>
@@ -108,12 +122,15 @@ export function App() {
 
         <section id="how" className="section">
           <div className="wrap">
+            <p className="kicker">From tank to phone</p>
             <h2>How it works</h2>
-            <ol className="steps">
+            <ol className="flow">
               {steps.map((s, i) => (
-                <li key={s.title} className="card">
-                  <span className="step-no">{i + 1}</span>
-                  <Icon name={s.icon} />
+                <li key={s.title} className="flow-step">
+                  <div className="flow-badge">
+                    <Icon name={s.icon} />
+                    <span className="flow-no">{i + 1}</span>
+                  </div>
                   <h3>{s.title}</h3>
                   <p>{s.text}</p>
                 </li>
@@ -123,31 +140,42 @@ export function App() {
         </section>
 
         <section id="features" className="section section-tinted">
-          <div className="wrap">
-            <h2>What the app does</h2>
-            <div className="grid">
-              {features.map((f) => (
-                <article key={f.title} className="card feature">
-                  <span className="feature-icon"><Icon name={f.icon} /></span>
-                  <h3>{f.title}</h3>
-                  <p>{f.text}</p>
-                </article>
-              ))}
+          <div className="wrap features-layout">
+            <div className="features-intro">
+              <p className="kicker">The app</p>
+              <h2>What the app does</h2>
+              <p className="muted">Everything about your tank in one place - readable at a glance, with the detail when you want it.</p>
             </div>
+            <ul className="feature-list">
+              {features.map((f) => (
+                <li key={f.title} className="feature-row">
+                  <span className="feature-icon"><Icon name={f.icon} /></span>
+                  <div>
+                    <h3>{f.title}</h3>
+                    <p>{f.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
-        <section className="section">
+        <section className="section section-dark">
           <div className="wrap">
+            <p className="kicker kicker-light">The station</p>
             <h2>Three sensors, one station</h2>
-            <div className="grid grid-3">
+            <div className="sensor-grid">
               {sensors.map((s) => (
-                <article key={s.name} className="card sensor">
-                  <Icon name={s.icon} />
+                <article key={s.name} className="sensor-card">
+                  <div className="sensor-head">
+                    <span className="sensor-icon"><Icon name={s.icon} /></span>
+                    <span className="where">{s.where}</span>
+                  </div>
                   <h3>{s.name}</h3>
-                  <p className="muted">{s.part}</p>
-                  <p className="chip chip-normal">{s.normal}</p>
-                  <p>{s.note}</p>
+                  <p className="sensor-part">{s.part}</p>
+                  <p className="sensor-normal"><small>Normal</small>{s.normal}</p>
+                  <Gauge s={s} />
+                  <p className="sensor-note">{s.note}</p>
                 </article>
               ))}
             </div>
@@ -162,9 +190,7 @@ export function App() {
                 {installSteps.map((t) => <li key={t}>{t}</li>)}
               </ol>
               <DownloadButton />
-              <p className="muted small">
-                Older versions and release notes: <a href={RELEASES_URL}>GitHub Releases</a>. Android only for now.
-              </p>
+              <p className="muted small">Android only for now · version {APP_VERSION}</p>
             </div>
           </div>
         </section>
@@ -174,9 +200,7 @@ export function App() {
         <div className="wrap">
           <div className="brand brand-footer"><img src={logoMark} alt="" /><span>TubigTala</span></div>
           <p className="disclaimer">{DISCLAIMER}</p>
-          <p className="muted small">
-            <a href={REPO_URL}>Source code on GitHub</a> · © {new Date().getFullYear()} TubigTala
-          </p>
+          <p className="muted small">© {new Date().getFullYear()} TubigTala</p>
         </div>
       </footer>
     </>
