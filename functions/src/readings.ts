@@ -7,14 +7,19 @@
 //     owner's registered phones (users/{uid}/pushTokens), when phone notifications are on.
 //  3. If a field is critical, pH (calibrated) or temperature, for SMS_STREAK readings in a row:
 //     one SMS per alert episode, within the account-wide day/month caps.
+//  4. A field with no value: after SENSOR_MISSING_MS without one, one "sensor not reading" alert
+//     (push only), tracked in the same alertState document (missingSince, missingAlertedAt). The
+//     app never writes those two fields, and its own set() of that document only happens when a
+//     value is back, which ends the episode anyway. Station offline: stations.ts.
 // No email (dropped 13 Nov 2026): alerts reach the user as in-app/phone notifications and SMS.
 // Deliveries are recorded in alertDeliveries/{id}, created before sending: a second run for the
 // same reading or episode finds the record and sends nothing. The app cannot read these records.
-import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentData, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 
 import { alertText, nextAlertStep, type AlertState } from '../../mobile/src/domain/alerts.ts';
 import { classify, type Metric } from '../../mobile/src/domain/thresholds.ts';
+import { missingStep, sensorMissingText } from './health.ts';
 import {
   isCriticalStreak, maskPhone, reserveSms, smsMetricAllowed, smsText, SMS_STREAK,
   type SmsBudget, type SmsItem,
@@ -35,9 +40,10 @@ async function claim(db: Firestore, id: string, data: DocumentData): Promise<boo
   }
 }
 
-/** An alert this reading raised (here or in the app), as stored in users/{uid}/notifications. */
-interface PushAlert {
-  metric: Metric;
+/** An alert to push (value alerts, sensor not reading, station offline), as stored in users/{uid}/notifications. */
+export interface PushAlert {
+  /** the field it is about; null for station offline / back online */
+  metric: Metric | null;
   alertId: string;
   title: string;
   body: string;
@@ -78,14 +84,28 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
   for (const metric of METRICS) {
     const value = typeof reading[metric] === 'number' ? (reading[metric] as number) : null;
     const status = classify(metric, value);
-    if (status.level === 'unknown') continue;
-
     const stateRef = db.doc(`users/${uid}/alertState/${deviceId}_${metric}`);
+
+    if (status.level === 'unknown') {
+      // No value says nothing about the water, but if it lasts the sensor needs looking at.
+      const missing = await trackMissing(db, stateRef, metric, { uid, deviceId, readingId, deviceName, simulated, readingMs });
+      if (missing) alerts.push(missing);
+      continue;
+    }
+
     const alertRef = db.doc(`users/${uid}/notifications/${deviceId}_${metric}_${readingId}`);
     const after = await db.runTransaction(async (tx) => {
-      const state = toAlertState((await tx.get(stateRef)).data());
+      const raw = (await tx.get(stateRef)).data();
+      const state = toAlertState(raw);
       const step = nextAlertStep(state, status.level, readingMs);
-      if (step.kind === 'none') return state;
+      if (step.kind === 'none') {
+        // A value again after missing ones: the sensor is back, so the missing episode ends.
+        // (A raise/update below replaces the whole document, which ends it too.)
+        if (raw?.missingSince != null || raw?.missingAlertedAt != null) {
+          tx.update(stateRef, { missingSince: FieldValue.delete(), missingAlertedAt: FieldValue.delete() });
+        }
+        return state;
+      }
       if (step.kind === 'raise') {
         const text = alertText(metric, status.label, value, deviceName, { simulated, uncalibrated: metric === 'ph' && !phCalibrated });
         // Same fields and ID as the app's alert (services/alerts.ts), so either can create it.
@@ -127,11 +147,50 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
 }
 
 /**
+ * A reading without a value for `metric`: starts the missing-value episode, or raises the one
+ * "sensor not reading" alert once it has lasted SENSOR_MISSING_MS (health.ts). The alert has
+ * metric null, so every app version shows its own title and text; `sensor` says which one.
+ */
+async function trackMissing(
+  db: Firestore, stateRef: DocumentReference, metric: Metric,
+  ctx: Pick<Ctx, 'uid' | 'deviceId' | 'readingId' | 'deviceName' | 'simulated' | 'readingMs'>,
+): Promise<PushAlert | null> {
+  const alertRef = db.doc(`users/${ctx.uid}/notifications/${ctx.deviceId}_${metric}_missing_${ctx.readingId}`);
+  return db.runTransaction(async (tx) => {
+    const raw = (await tx.get(stateRef)).data();
+    const sinceMs = raw?.missingSince instanceof Timestamp ? raw.missingSince.toMillis() : null;
+    const step = missingStep({ sinceMs, alerted: raw?.missingAlertedAt instanceof Timestamp }, ctx.readingMs);
+    if (step === 'none') return null;
+    if (step === 'start') {
+      tx.set(stateRef, { missingSince: Timestamp.fromMillis(ctx.readingMs), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return null;
+    }
+    const text = sensorMissingText(metric, ctx.deviceName, sinceMs ?? ctx.readingMs, ctx.readingMs, ctx.simulated);
+    tx.set(alertRef, {
+      title: text.title.slice(0, 80),
+      body: text.body.slice(0, 200),
+      deviceId: ctx.deviceId,
+      metric: null,
+      value: null,
+      level: 'warning',
+      kind: 'sensor',
+      sensor: metric,
+      readingId: ctx.readingId,
+      createdAt: FieldValue.serverTimestamp(),
+      read: false,
+    });
+    tx.set(stateRef, { missingAlertedAt: Timestamp.fromMillis(ctx.readingMs), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    logger.info(`${ctx.deviceId}: ${metric} has had no value since ${new Date(sinceMs ?? ctx.readingMs).toISOString()}`);
+    return { metric, alertId: alertRef.id, title: text.title, body: text.body };
+  });
+}
+
+/**
  * One push per alert to every phone the owner registered, when phone notifications are on.
  * Recorded in alertDeliveries (push_{uid}_{alertId}) before sending, so a retried run sends
- * nothing twice. Tokens FCM rejects for good are deleted.
+ * nothing twice. Tokens FCM rejects for good are deleted. Also used by stations.ts.
  */
-async function sendPush(deps: Deps, ctx: Ctx, alerts: PushAlert[]): Promise<void> {
+export async function sendPush(deps: Deps, ctx: Pick<Ctx, 'uid' | 'deviceId' | 'readingId' | 'profile'>, alerts: PushAlert[]): Promise<void> {
   const { db } = deps;
   if (ctx.profile?.pushEnabled !== true) return;
   const tokenDocs = (await db.collection(`users/${ctx.uid}/pushTokens`).get()).docs;

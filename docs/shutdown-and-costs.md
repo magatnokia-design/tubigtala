@@ -14,18 +14,19 @@ What can cost money, what to watch, and how to turn everything off safely. Check
 Firestore usage (measured 16 Nov 2026 with Cloud Monitoring, `firestore.googleapis.com/document/read_count`, where noted):
 - One board at one reading a minute writes ~1,440 readings a day.
 - The board alone reads 6 documents an hour (its pH calibration check every 10 minutes, measured).
-- The alert function reads about 4 documents per reading (device record + one alert state per field): ~5,800 a day.
+- The alert function reads about 4 documents per reading (device record + one alert state per field): ~5,800 a day. A field without a value costs nothing extra (its alert state is read either way).
+- The station check (`checkStations`, every 5 minutes) reads about 3 documents per paired station per run: ~860 a day.
 - A phone open on the Water tab reads about one document per reading.
 - Analytics Live reloads the last hour (~65 documents) every 5 minutes while the app is open, even on another tab: ~19,000 a day if left open all day.
 - A chart or export reads every reading in its range: one day ≈ 1,440, 7 days up to 10,000 (the cap; Firestore allows no more in a live query). Switching Live ↔ By date reloads the range.
 
-So station + function use about 12% of the free reads; a few long charts or exports a day by several users is what would go past it - at about USD 0.04 per extra 100,000 reads.
+So station + functions use about 14% of the free reads; a few long charts or exports a day by several users is what would go past it - at about USD 0.04 per extra 100,000 reads.
 
 ## Server-side alerts and SMS (on since 16 Nov 2026)
 
 | What | Service | Cost model | Notes |
 |---|---|---|---|
-| Server-side alerts (app closed) | Firebase **Blaze** + Cloud Functions + Secret Manager | Pay as you go above a free monthly allowance | **On since 16 Nov 2026**: billing account "Nokia Billing Account", budget **USD 2** (set in the upgrade dialog). A budget alert only emails; it does not stop charges. Expected cost about USD 0: one function run per reading (~43,000 a month, free allowance is millions); `maxInstances: 2`. To stop all server costs: delete the function (`firebase functions:delete onReadingCreated`), then downgrade the project to Spark in the Firebase console. |
+| Server-side alerts (app closed) | Firebase **Blaze** + Cloud Functions + Secret Manager | Pay as you go above a free monthly allowance | **On since 16 Nov 2026**: billing account "Nokia Billing Account", budget **USD 2** (set in the upgrade dialog). A budget alert only emails; it does not stop charges. Expected cost about USD 0: one function run per reading (~43,000 a month, free allowance is millions); `maxInstances: 2`. The station check `checkStations` adds ~8,600 runs a month, about 3 document reads per paired station per run (~860 a day), and one **Cloud Scheduler** job (free: 3 jobs per billing account; then USD 0.10 a month per job). To stop all server costs: delete both functions (`firebase functions:delete onReadingCreated checkStations --region asia-southeast1`), then downgrade the project to Spark in the Firebase console. |
 | Phone notifications | Firebase Cloud Messaging, sent by the function | Free | One push per alert to each registered phone (app 0.9.2+). No extra account or key. First delivered 16 Nov 2026 with the app closed. |
 | SMS alerts | TextBee + the gateway phone's SIM | SIM load per SMS | **Live since 16 Nov 2026** (first SMS delivered that day). Capped at 5 a day and 100 a month (`functions/src/policy.ts`); the emulator only logs, never sends. The TextBee account/phone is shared with another project (Smilebook): one monthly limit for both (TextBee free plan 300/month, received SMS included). |
 

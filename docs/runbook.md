@@ -86,9 +86,13 @@ cd functions; npm run test:e2e       # builds, starts auth+firestore+functions e
 
 ## Cloud Functions (alert backend)
 
-`functions\` holds the backend that raises alerts and sends SMS for every uploaded reading (`onReadingCreated`, region `asia-southeast1`; policy in `docs/data-model.md`, "Alert policy"). It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
+`functions\` holds the backend, region `asia-southeast1` (policy in `docs/data-model.md`, "Alert policy"). Exactly two functions:
+- `onReadingCreated` - for every uploaded reading: raises alerts, pushes them to the owner's phones (Firebase Cloud Messaging), sends SMS for critical ones, and tracks sensors that stop sending values.
+- `checkStations` - every 5 minutes (one Cloud Scheduler job): station offline / back online.
 
-Status (16 Nov 2026): the project is on **Blaze** (billing account "Nokia Billing Account", budget USD 2 - an email alert, not a spending stop). Deployed functions send SMS through **TextBee** (`functions/src/providers.ts`); the **emulator always logs** SMS and never sends, whatever secrets exist. Server push and offline checks are not built yet. Email alerts were dropped on 13 Nov 2026 (phone notifications + SMS only).
+ It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
+
+Status (16 Nov 2026): the project is on **Blaze** (billing account "Nokia Billing Account", budget USD 2 - an email alert, not a spending stop). Deployed functions send SMS through **TextBee** (`functions/src/providers.ts`); the **emulator always logs** SMS and push and never sends, whatever secrets exist. Server push since 16 Nov 2026 (app 0.9.2+ registers the phone); station health alerts (sensor not reading, offline, back online) since the same day. Email alerts were dropped on 13 Nov 2026 (phone notifications + SMS only).
 
 **Secrets** (Secret Manager in tubigtala-64d9e, readable only by the function; set 16 Nov 2026, version 1). To change one, run the command and paste the new value when asked; the next deploy or cold start picks it up:
 
@@ -108,6 +112,8 @@ firebase use                                # must print tubigtala-64d9e - never
 firebase deploy --only functions            # say No if it offers to delete functions you never wrote
 firebase deploy --only firestore:rules      # only when firestore.rules changed
 ```
+
+The deploy should list exactly `onReadingCreated` and `checkStations`. The first deploy of `checkStations` turns on the Cloud Scheduler API and creates its job; if it fails right after enabling an API, wait a few minutes and run it again (the same happened with Eventarc on the first functions deploy). Deploy rules **before** flashing firmware that sends values the old rules reject (0.3.3: temperatures above 60 °C).
 
 A plain `firebase deploy` deploys rules, indexes and functions together.
 

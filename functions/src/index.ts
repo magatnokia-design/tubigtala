@@ -3,9 +3,11 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 
-import { providersFromEnv, TEXTBEE_API_KEY, TEXTBEE_DEVICE_ID } from './providers.ts';
+import { providersFromEnv, pushOnlyProviders, TEXTBEE_API_KEY, TEXTBEE_DEVICE_ID } from './providers.ts';
 import { processReading } from './readings.ts';
+import { checkStationsOnce } from './stations.ts';
 
 initializeApp();
 
@@ -28,5 +30,21 @@ export const onReadingCreated = onDocumentCreated(
       event.params.readingId,
       event.data.data(),
     );
+  },
+);
+
+// Station offline / back online (stations.ts). A station that stops uploading triggers nothing
+// above, so this looks every 5 minutes. One Cloud Scheduler job (free: 3 jobs per billing account,
+// then USD 0.10 a month each); about 3 document reads per paired station per run.
+export const checkStations = onSchedule(
+  {
+    schedule: 'every 5 minutes',
+    timeZone: 'Asia/Manila',
+    region: 'asia-southeast1',
+    memory: '256MiB',
+    maxInstances: 1,
+  },
+  async () => {
+    await checkStationsOnce({ db: getFirestore(), providers: pushOnlyProviders() });
   },
 );

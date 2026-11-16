@@ -154,6 +154,10 @@ test('client-chosen serverTime is rejected', () =>
 test('pH above 14 is rejected', () => assertFails(setDoc(doc(as('board'), path('abcd1234-0')), reading({ ph: 15 }))));
 test('temperature out of range is rejected', () =>
   assertFails(setDoc(doc(as('board'), path('abcd1234-0')), reading({ temperatureC: -127 }))));
+test('hot water up to the sensor limit (125 °C) is accepted, so it shows as too hot', () =>
+  assertSucceeds(setDoc(doc(as('board'), path('abcd1234-0')), reading({ temperatureC: 72.5 }))));
+test('temperature above 125 °C is rejected', () =>
+  assertFails(setDoc(doc(as('board'), path('abcd1234-0')), reading({ temperatureC: 125.5 }))));
 test('string value is rejected', () => assertFails(setDoc(doc(as('board'), path('abcd1234-0')), reading({ ph: '7' }))));
 test('missing field is rejected', () => {
   const r = reading();
