@@ -314,3 +314,12 @@ test('alertDeliveries and smsBudget are closed to every app account, even the ow
   await assertFails(getDoc(doc(as('owner'), 'smsBudget/global')));
   await assertFails(setDoc(doc(as('owner'), 'smsBudget/global'), { day: '2026-11-04', dayCount: 0, month: '2026-11', monthCount: 0 }));
 });
+
+test('pushTokenOwners is closed to every app account: nobody can claim or read another phone', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'pushTokenOwners/abc123'), { uid: 'owner' });
+  });
+  await assertFails(getDoc(doc(as('owner'), 'pushTokenOwners/abc123')));
+  await assertFails(setDoc(doc(as('stranger'), 'pushTokenOwners/abc123'), { uid: 'stranger' }));
+  await assertFails(deleteDoc(doc(as('owner'), 'pushTokenOwners/abc123')));
+});

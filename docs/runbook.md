@@ -86,9 +86,10 @@ cd functions; npm run test:e2e       # builds, starts auth+firestore+functions e
 
 ## Cloud Functions (alert backend)
 
-`functions\` holds the backend, region `asia-southeast1` (policy in `docs/data-model.md`, "Alert policy"). Exactly two functions:
+`functions\` holds the backend, region `asia-southeast1` (policy in `docs/data-model.md`, "Alert policy"). Exactly three functions:
 - `onReadingCreated` - for every uploaded reading: raises alerts, pushes them to the owner's phones (Firebase Cloud Messaging), sends SMS for critical ones, and tracks sensors that stop sending values.
 - `checkStations` - every 5 minutes (one Cloud Scheduler job): station offline / back online.
+- `onPushTokenWritten` - when a phone registers for push: removes it from the account it was on before (a phone belongs to the account that registered it last).
 
  It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
 
@@ -113,7 +114,7 @@ firebase deploy --only functions            # say No if it offers to delete func
 firebase deploy --only firestore:rules      # only when firestore.rules changed
 ```
 
-The deploy should list exactly `onReadingCreated` and `checkStations`. The first deploy of `checkStations` turns on the Cloud Scheduler API and creates its job; if it fails right after enabling an API, wait a few minutes and run it again (the same happened with Eventarc on the first functions deploy). Deploy rules **before** flashing firmware that sends values the old rules reject (0.3.3: temperatures above 60 °C).
+The deploy should list exactly `onReadingCreated`, `checkStations` and `onPushTokenWritten`. The first deploy of `checkStations` turns on the Cloud Scheduler API and creates its job; if it fails right after enabling an API, wait a few minutes and run it again (the same happened with Eventarc on the first functions deploy). Deploy rules **before** flashing firmware that sends values the old rules reject (0.3.3: temperatures above 60 °C).
 
 A plain `firebase deploy` deploys rules, indexes and functions together.
 

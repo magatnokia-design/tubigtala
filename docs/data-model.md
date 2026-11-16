@@ -22,6 +22,7 @@ Server-only (written by Cloud Functions with firebase-admin; no app account can 
 alertDeliveries/{id}   one SMS: sms_{uid}_{deviceId}_{metric}_{alertedAtMs}; one push: push_{uid}_{alertId} (email_… records may exist from before 13 Nov 2026)
 smsBudget/global       SMS counted per Philippine day and month, for the caps
 devicePairing/{deviceId}  { code }: the station's secret pairing code, set by an admin (devtools pair-code); only the rules read it
+pushTokenOwners/{tokenId}  { uid, updatedAt }: which account a phone registered with last (onPushTokenWritten); closed to the app by the rules' default deny
 ```
 
 `alertDeliveries` fields: `channel` (`sms` or `push`; `email` only in records from before 13 Nov 2026), `uid`, `deviceId`, `readingId`, `metric`, `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached` / `skipped: no phone registered`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
@@ -85,7 +86,9 @@ Where the backend sends phone notifications: one document per phone while Settin
 | `appVersion` | string | App version that registered it (troubleshooting). |
 | `updatedAt` | timestamp | Server time of the write. |
 
-The document ID is a short hash of the token (`mobile/src/domain/push.ts`), so the same phone always maps to the same document.
+The document ID is a short hash of the token (`mobile/src/domain/push.ts`), so the same phone always maps to the same document - under every account.
+
+**A phone belongs to the account that registered it last** (since 16 Nov 2026, `functions/src/push-owners.ts`). A sign-out right after the app opens can lose a race with the background registration and leave the phone on the old account too (seen when the owner switched from the station's login to a personal account), and every account it is left on would push its alerts to that phone. So the trigger `onPushTokenWritten` records each phone's account in `pushTokenOwners/{tokenId}` and, when the same phone registers on another account, deletes it from the previous one. Safe because an account can only write while signed in and the next one only signs in after it signed out, so the server sees one phone's registrations in the order the accounts were used. Tested in `functions/src/readings.e2e.ts`.
 
 Owner only. Each phone touches this record only when a field's status changes, not on every reading, to keep Firestore reads low. Verified on the emulator (28 Oct 2026): two phones racing on the same reading produce one alert; the loser gets `permission-denied` and does nothing on its next try.
 

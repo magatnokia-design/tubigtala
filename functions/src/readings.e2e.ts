@@ -190,6 +190,29 @@ test('station offline after 15 minutes without readings, then back online - one 
   assert.equal(all.length, 1, 'only the silent station');
 });
 
+test('a phone belongs to the account that registered it last', async () => {
+  const other = (await getAuth().createUser({ email: 'second@tubigtala.test', password: 'e2e-pass-456' })).uid;
+  const phone = { token: 'e2e-shared-phone-token-0123456789', platform: 'android', appVersion: 'e2e', updatedAt: FieldValue.serverTimestamp() };
+  const mine = db.doc(`users/${uid}/pushTokens/e2eshared`);
+  const theirs = db.doc(`users/${other}/pushTokens/e2eshared`);
+  await mine.set(phone);
+  await until('owner recorded', async () => ((await db.doc('pushTokenOwners/e2eshared').get()).get('uid') === uid ? true : undefined));
+
+  // The same phone signs in to another account: it leaves the first one.
+  await theirs.set(phone);
+  await until('removed from the first account', async () => (!(await mine.get()).exists ? true : undefined));
+  assert.ok((await theirs.get()).exists, 'kept on the account that registered it last');
+  assert.equal((await db.doc('pushTokenOwners/e2eshared').get()).get('uid'), other);
+  assert.ok((await db.doc(`users/${uid}/pushTokens/e2ephone1`).get()).exists, "the first account's other phone is untouched");
+
+  // Re-registering on the same account (app start) changes nothing; signing out forgets the owner.
+  await theirs.set(phone);
+  await sleep(2000);
+  assert.ok((await theirs.get()).exists);
+  await theirs.delete();
+  await until('owner forgotten', async () => (!(await db.doc('pushTokenOwners/e2eshared').get()).exists ? true : undefined));
+});
+
 test('uncalibrated critical pH: alert, no SMS', async () => {
   await addDevice('e2e-ph', false);
   await upload('e2e-ph', [{ ph: 9.6, phCalibrated: false }, { ph: 9.6, phCalibrated: false }, { ph: 9.7, phCalibrated: false }]);
