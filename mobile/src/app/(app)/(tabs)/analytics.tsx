@@ -102,7 +102,10 @@ export default function AnalyticsScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      {/* Fills the screen like the Water tab: the three cards share its height and each chart
+          stretches into its card, so a normal phone shows Live and By date without scrolling; a
+          very small one (or extra notices) still scrolls instead of squashing the charts. */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} bounces={false} overScrollMode="never">
         <OfflineBanner />
 
         <View style={[styles.contextRow, mode === 'date' && styles.contextCentered]}>
@@ -161,38 +164,43 @@ function MetricChart({ metric, icon, readings, multiDay, intervalSec }: { metric
   const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
   const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
 
+  // Compact card so three fit one screen: name, newest value and status on one row; the chart
+  // fills the middle (its height is whatever the card has left); high / low and the insight are
+  // one line each underneath.
   return (
     <View style={[styles.card, { borderColor: theme.border }]}>
       <View style={styles.cardTop}>
         <Icon name={icon} size={20} />
-        <ThemedText type="smallBold" style={styles.cardTitle}>{info.name}</ThemedText>
+        <ThemedText type="smallBold" style={styles.cardTitle} numberOfLines={1}>{info.name}</ThemedText>
+        <View style={styles.valueBox}>
+          <ThemedText style={styles.value}>{formatNumber(ins.newest?.v ?? null, info.decimals)}</ThemedText>
+          {info.unit ? <ThemedText themeColor="textSecondary" style={styles.unit}>{info.unit}</ThemedText> : null}
+        </View>
         <LevelChip level={status.level} label={status.label} compact />
       </View>
 
-      <View style={styles.valueRow}>
-        <ThemedText style={styles.value}>{formatNumber(ins.newest?.v ?? null, info.decimals)}</ThemedText>
-        {info.unit ? <ThemedText themeColor="textSecondary" style={styles.unit}>{info.unit}</ThemedText> : null}
-        <View style={styles.extremes}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.extremeText} numberOfLines={1}>
-            {ins.max ? `High ${fmt(ins.max.v)} · ${when(ins.max.t)}` : 'High —'}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.extremeText} numberOfLines={1}>
-            {ins.min ? `Low ${fmt(ins.min.v)} · ${when(ins.min.t)}` : 'Low —'}
-          </ThemedText>
-        </View>
-      </View>
-
       {showLastValid && ins.latest && (
-        <ThemedText type="small" themeColor="textSecondary">{`No value in the newest reading · last value ${fmt(ins.latest.v)} at ${when(ins.latest.t)}`}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.lineText}>
+          {`No value in the newest reading · last ${fmt(ins.latest.v)} at ${when(ins.latest.t)}`}
+        </ThemedText>
       )}
 
-      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal} height={130}
+      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal}
         // Same rule as the stale status (domain/status.ts): no reading for 3 intervals = a gap.
         gapMs={STALE_AFTER_INTERVALS * intervalSec * 1000} />
 
+      <View style={styles.extremes}>
+        <ThemedText type="small" themeColor="textSecondary" style={[styles.lineText, styles.flex]} numberOfLines={1}>
+          {ins.max ? `High ${fmt(ins.max.v)} · ${when(ins.max.t)}` : 'High —'}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" style={[styles.lineText, styles.flex, styles.right]} numberOfLines={1}>
+          {ins.min ? `Low ${fmt(ins.min.v)} · ${when(ins.min.t)}` : 'Low —'}
+        </ThemedText>
+      </View>
+
       <View style={[styles.insight, { backgroundColor: theme.backgroundElement }]}>
-        <Icon name="insights" size={16} />
-        <ThemedText type="small" style={styles.insightText}>{insightSentence(metric, ins)}</ThemedText>
+        <Icon name="insights" size={14} />
+        <ThemedText type="small" style={[styles.lineText, styles.flex]} numberOfLines={1}>{insightSentence(metric, ins)}</ThemedText>
       </View>
     </View>
   );
@@ -207,21 +215,25 @@ const styles = StyleSheet.create({
   exportButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.pill, backgroundColor: 'rgba(255,255,255,0.18)' },
   segment: { flexDirection: 'row', borderRadius: Radius.pill, padding: 3 },
   segmentItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.one, paddingVertical: Spacing.two, borderRadius: Radius.pill },
-  content: { padding: Spacing.three, paddingTop: HEADER_CURVE + Spacing.two, gap: Spacing.two + 2, paddingBottom: Spacing.five },
-  contextRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 },
+  content: { flexGrow: 1, padding: Spacing.three, paddingTop: HEADER_CURVE + Spacing.two, gap: Spacing.two, paddingBottom: Spacing.three },
+  contextRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 36 },
   contextCentered: { justifyContent: 'center' },
   spinnerRight: { position: 'absolute', right: 0 },
   liveLabel: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   liveDot: { width: 8, height: 8, borderRadius: 4 },
   dateChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
-  card: { borderWidth: 1, borderRadius: Radius.card, padding: Spacing.three, gap: Spacing.two },
+  // flex: 1 = the three cards share the screen; minHeight keeps a chart readable on small phones
+  // (the screen scrolls instead).
+  // Budget on a 360 x 800 phone: ~166 per card; fixed rows ~102, so the chart gets ~64 (min 60).
+  card: { flex: 1, minHeight: 160, borderWidth: 1, borderRadius: Radius.card, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, gap: Spacing.one + 2 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  cardTitle: { flex: 1, fontSize: 16 },
-  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.one },
-  value: { fontSize: 30, lineHeight: 36, fontWeight: 700 },
-  unit: { fontSize: 14 },
-  extremes: { flex: 1, alignItems: 'flex-end' },
-  extremeText: { fontSize: 12, lineHeight: 16 },
-  insight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two + 2, paddingVertical: Spacing.two, borderRadius: Radius.small },
-  insightText: { flex: 1 },
+  cardTitle: { flex: 1, fontSize: 15 },
+  valueBox: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  value: { fontSize: 22, lineHeight: 28, fontWeight: 700 },
+  unit: { fontSize: 13 },
+  flex: { flex: 1 },
+  right: { textAlign: 'right' },
+  lineText: { fontSize: 12, lineHeight: 16 },
+  extremes: { flexDirection: 'row', gap: Spacing.two },
+  insight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.small },
 });
