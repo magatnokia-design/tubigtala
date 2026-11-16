@@ -22,6 +22,7 @@ import { insight, insightSentence } from '@/domain/insights';
 import { STALE_AFTER_INTERVALS } from '@/domain/status';
 import { classify, METRIC_INFO, RANGES, type Metric } from '@/domain/thresholds';
 import type { Reading } from '@/domain/types';
+import { useAppActive } from '@/hooks/use-app-active';
 import { useReadingsBetween } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
@@ -36,9 +37,11 @@ const METRICS: { metric: Metric; icon: AndroidSymbol }[] = [
 ];
 
 const LIVE_WINDOW_MS = 3_600_000;
-// The live query restarts every 5 minutes so its window moves forward (and stays ~1 hour of
-// reads); between restarts the charts are trimmed to exactly the last hour.
-const LIVE_STEP_MS = 5 * 60_000;
+// The live query starts at the top of the previous hour and restarts once an hour, so it holds
+// 1-2 hours of readings; in between, each new reading costs one read and the charts are trimmed
+// to exactly the last hour. (Until 0.9.2 it restarted every 5 minutes, re-reading the whole hour
+// each time: ~19,000 reads a day for a phone left on this screen, now ~3,000.)
+const LIVE_STEP_MS = 60 * 60_000;
 // Latest instant Firestore timestamps allow; "no upper limit" for the live query.
 const FAR_FUTURE_MS = 253402300799000;
 
@@ -51,12 +54,17 @@ export default function AnalyticsScreen() {
   const [mode, setMode] = useState<Mode>('live');
   const [range, setRange] = useState<DayRange>(() => ({ start: startOfDay(Date.now()), end: startOfDay(Date.now()) }));
   const [calendarOpen, setCalendarOpen] = useState(false);
+  // Once By date has been opened, its query stays while the app is in front, so switching
+  // Live <-> By date does not re-read the whole range each time.
+  const [dateOpened, setDateOpened] = useState(false);
 
   const deviceId = device?.id ?? null;
   const now = useNow(30_000);
+  // Queries only while the app is on screen: nothing is read for a phone that has it in the background.
+  const appActive = useAppActive();
   const liveStart = Math.floor(now / LIVE_STEP_MS) * LIVE_STEP_MS - LIVE_WINDOW_MS;
-  const live = useReadingsBetween(mode === 'live' ? deviceId : null, liveStart, FAR_FUTURE_MS);
-  const dated = useReadingsBetween(mode === 'date' ? deviceId : null, range.start, endOfDay(range.end));
+  const live = useReadingsBetween(appActive ? deviceId : null, liveStart, FAR_FUTURE_MS);
+  const dated = useReadingsBetween(appActive && dateOpened ? deviceId : null, range.start, endOfDay(range.end));
   const history = mode === 'live' ? live : dated;
 
   const readings = useMemo(() => {
@@ -90,7 +98,10 @@ export default function AnalyticsScreen() {
             return (
               <Pressable
                 key={m}
-                onPress={() => setMode(m)}
+                onPress={() => {
+                  setMode(m);
+                  if (m === 'date') setDateOpened(true);
+                }}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
                 style={[styles.segmentItem, selected && { backgroundColor: theme.background }]}>
@@ -164,9 +175,9 @@ function MetricChart({ metric, icon, readings, multiDay, intervalSec }: { metric
   const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
   const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
 
-  // Compact card so three fit one screen: name, newest value and status on one row; the chart
-  // fills the middle (its height is whatever the card has left); high / low and the insight are
-  // one line each underneath.
+  // Simple card so three fit one screen: name, newest value and status on one row; the chart
+  // fills the rest; one quiet line underneath says how the period went. (High / low lines were
+  // removed in 0.9.3 at the user's request: the chart itself shows them.)
   return (
     <View style={[styles.card, { borderColor: theme.border }]}>
       <View style={styles.cardTop}>
@@ -189,19 +200,9 @@ function MetricChart({ metric, icon, readings, multiDay, intervalSec }: { metric
         // Same rule as the stale status (domain/status.ts): no reading for 3 intervals = a gap.
         gapMs={STALE_AFTER_INTERVALS * intervalSec * 1000} />
 
-      <View style={styles.extremes}>
-        <ThemedText type="small" themeColor="textSecondary" style={[styles.lineText, styles.flex]} numberOfLines={1}>
-          {ins.max ? `High ${fmt(ins.max.v)} · ${when(ins.max.t)}` : 'High —'}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" style={[styles.lineText, styles.flex, styles.right]} numberOfLines={1}>
-          {ins.min ? `Low ${fmt(ins.min.v)} · ${when(ins.min.t)}` : 'Low —'}
-        </ThemedText>
-      </View>
-
-      <View style={[styles.insight, { backgroundColor: theme.backgroundElement }]}>
-        <Icon name="insights" size={14} />
-        <ThemedText type="small" style={[styles.lineText, styles.flex]} numberOfLines={1}>{insightSentence(metric, ins)}</ThemedText>
-      </View>
+      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.lineText}>
+        {insightSentence(metric, ins)}
+      </ThemedText>
     </View>
   );
 }
@@ -231,9 +232,5 @@ const styles = StyleSheet.create({
   valueBox: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
   value: { fontSize: 22, lineHeight: 28, fontWeight: 700 },
   unit: { fontSize: 13 },
-  flex: { flex: 1 },
-  right: { textAlign: 'right' },
   lineText: { fontSize: 12, lineHeight: 16 },
-  extremes: { flexDirection: 'row', gap: Spacing.two },
-  insight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: 2, borderRadius: Radius.small },
 });
