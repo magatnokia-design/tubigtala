@@ -60,11 +60,13 @@ export const sensors = [
   },
 ] as const;
 
+// Self-setup in order: app, the station's Wi-Fi (firmware 0.4.0+, tested on a phone 16 Nov 2026),
+// account, pairing. "Add TubigTala Station" is the app's own label (Water tab and Settings).
 export const installSteps = [
-  'Tap Download for Android on your phone. The file is TubigTala.apk (about 65 MB).',
-  'Open it. If Android asks, allow your browser to "Install unknown apps".',
-  'If Play Protect warns about an unknown app, choose to install anyway - TubigTala is not on the Play Store yet.',
-  'Open TubigTala, create your account, and scan the QR sticker on your station.',
+  { title: 'Get the app', text: 'Tap Download for Android on your phone (TubigTala.apk, about 65 MB) and open it. Allow "Install unknown apps" if Android asks; if Play Protect warns, install anyway - TubigTala is not on the Play Store yet.' },
+  { title: 'Connect the station to Wi-Fi', text: 'Plug in your TubigTala Station. In a new place it opens its own setup Wi-Fi within a minute and its blue light blinks. Scan the Wi-Fi setup sticker with your phone camera, then pick your home Wi-Fi (2.4 GHz) on the page that opens. To change networks later, hold the station\'s BOOT button for 3 seconds.' },
+  { title: 'Create your account', text: 'Open TubigTala and sign up with your email or Google.' },
+  { title: 'Add your station', text: 'Tap Add TubigTala Station and scan the QR sticker on the station. Its readings appear within a minute.' },
 ];
 
 export const DISCLAIMER =

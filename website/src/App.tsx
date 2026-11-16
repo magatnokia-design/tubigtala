@@ -82,7 +82,7 @@ export function App() {
           <nav>
             <a href="#how">How it works</a>
             <a href="#features">Features</a>
-            <a href="#install">Install</a>
+            <a href="#install">Set up</a>
           </nav>
         </div>
       </header>
@@ -181,9 +181,10 @@ export function App() {
         <section id="install" className="section section-tinted">
           <div className="wrap install">
             <div>
-              <h2>Install on Android</h2>
+              <p className="kicker">Self-setup</p>
+              <h2>Up and running in four steps</h2>
               <ol className="install-steps">
-                {installSteps.map((t) => <li key={t}>{t}</li>)}
+                {installSteps.map((s) => <li key={s.title}><strong>{s.title}.</strong> {s.text}</li>)}
               </ol>
               <DownloadButton />
               <p className="muted small">Android only for now · version {APP_VERSION}</p>
