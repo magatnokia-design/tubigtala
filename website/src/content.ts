@@ -6,7 +6,7 @@
  * TubigTala.apk, so this always gets the newest. The page links only to the file itself.
  */
 export const APK_URL = 'https://github.com/magatnokia-design/tubigtala/releases/latest/download/TubigTala.apk';
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.9.1';
 
 export const steps = [
   { icon: 'sensors', title: 'The station measures', text: 'An ESP32 station at your tank reads the water temperature, the pH, and the ammonia gas in the air above the water - every minute.' },
