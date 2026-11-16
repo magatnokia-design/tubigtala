@@ -123,7 +123,7 @@ What the lines tell you:
 |---|---|
 | `DS18B20 NOT FOUND` | Probe not wired: DAT->G4, VCC->3V3, GND, or a loose wire in the green screw terminal. |
 | `85.00 C is the power-on value` | Normal right after power-on; run `diag` again. |
-| G34 pin about 1500 mV in pH 7 buffer (board about 2500 mV) | pH board and divider are right (the 2.5 V offset set with the trimmer, x 0.6). |
+| G34 pin about 2500 mV in pH 7 buffer (board the same) | pH board is right (the 2.5 V offset set with the trimmer). Since firmware 0.3.1 pH has no divider (10 kΩ series only, ratio 1.0), so pin = board. |
 | `CLIPPED` on G34 or G35 | Pin is near 3.3 V: divider missing, swapped (15k on top), or a board output above 5 V. Unplug and check before going on. |
 | G34 or G35 near 0 mV | Signal wire not connected, or the board has no power (V+/VCC -> V5, G/GND -> GND). |
 | Wi-Fi signal below about -80 dBm | Weak; uploads may fail. Move the board or the router closer. |

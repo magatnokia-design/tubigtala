@@ -17,12 +17,22 @@ Analog inputs use **ADC1 only** (GPIO 32–39). ADC2 pins stop working while Wi-
 | DS18B20 (waterproof probe) | DATA (yellow) | GPIO 4 | 4.7 kΩ pull-up from DATA to 3.3 V. |
 | DS18B20 | VDD (red) | 3.3 V | |
 | DS18B20 | GND (black) | GND | |
-| pH module (e.g. PH-4502C) | Po (analog out) | GPIO 34 (ADC1_CH6) | Through a voltage divider, see below. Input-only pin. |
+| pH module (e.g. PH-4502C) | Po (analog out) | GPIO 34 (ADC1_CH6) | **Through a 10 kΩ series resistor only, no 15 kΩ (since 16 Nov 2026, firmware 0.3.1, `PH_DIVIDER_RATIO 1.0`)** - see "pH input without a divider" below. Input-only pin. |
 | pH module | V+ / G | 5 V / GND | Most pH boards need 5 V. Check yours. |
 | MQ-137 module | AO (analog out) | GPIO 35 (ADC1_CH7) | Through a voltage divider. Input-only pin. |
 | MQ-137 module | VCC / GND | 5 V / GND | The heater draws ~150 mA. Check the USB supply can handle it. |
 
 All grounds must be shared (ESP32, pH board, MQ-137 board).
+
+## pH input without a divider (16 Nov 2026)
+
+On tank-01 the pH 15 kΩ never worked: with the BNC shorted G34 read ~2,538 mV whatever was done to the 15 kΩ (pulling a leg changed nothing; a second one placed "beside it" stopped the ESP32, so its rows were most likely EN, not G34/GND). With it removed, the pin reads the board's own output, and that is safe here because:
+- the zero (BNC shorted) is ~2.54 V and the probe in storage liquid ~2.42 V, so pH ~3.5-14 stays under the 3.1 V ADC clip;
+- the **10 kΩ in series** limits the current into G34's protection diode to ~0.15 mA if Po rises above 3.3 V (probe dry or unplugged, strong acid).
+
+Measured 16 Nov 2026 (cold buffers, ~17-20 °C): **6.86 -> ~2,607 mV, 4.01 -> ~3,075 mV** (~165 mV per pH, a healthy probe). 12 more counter-clockwise turns of the zero trimmer changed nothing (end of its range), so 4.01 sits near the top of the ESP32's range. Firmware 0.3.2 therefore treats readings up to 3,150 mV as valid (this ESP32 saturates at exactly 3,160) and uploads the average of 1-second samples per minute (spread in 6.86 went from 83 mV to 3 mV). Readable range is about pH 3.7 and up; accuracy is best near pH 6-8.
+
+Rules: keep the probe in liquid; pull Po before unscrewing the probe. `PH_DIVIDER_RATIO` is 1.0 in `config.h`; changing it changes `phMv`, so recalibrate afterwards. If G34 is unplugged, nothing pulls it to 0 V any more, so it may read noise instead of "not detected". The gas input (G35) still uses 10 kΩ / 15 kΩ.
 
 ## Voltage dividers (check before connecting)
 

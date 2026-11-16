@@ -32,7 +32,7 @@ Same pins as before ([wiring.md](wiring.md#pin-map)):
 |---|---|
 | V+ | ESP32 **V5** (5 V) |
 | G | ESP32 **GND** (left #14) |
-| Po | **10 kΩ** -> G34, with **15 kΩ** from G34 to GND (the divider already on the board) |
+| Po | **10 kΩ** in series -> G34. No 15 kΩ since 16 Nov 2026 (firmware 0.3.1, `PH_DIVIDER_RATIO 1.0`; see wiring.md, "pH input without a divider") |
 | To, Do, second G | not connected |
 
 Plug the probe into the BNC socket. Keep the probe tip in its storage cap or in 4.01 buffer.
@@ -49,7 +49,7 @@ Power the station (charger or laptop). Within 2 minutes the Water tab pH card sh
 1. Unplug the probe. Short the BNC: a wire from the **centre hole** to the **outer metal shell**
    (this is "pH 7" for the board).
 2. Turn the zero trimmer (the blue one nearest the BNC) slowly until the board side reads about
-   **2500 mV** (G34 pin about 1500 mV). Watch it with `pins` on the laptop (once a second), or on
+   **2500 mV** (with no divider since 0.3.1 the G34 pin reads the same). Watch it with `pins` on the laptop (once a second), or on
    **Settings > Calibrate pH** in the app (live mV, once a minute).
 3. Remove the short, plug the probe back in.
 
