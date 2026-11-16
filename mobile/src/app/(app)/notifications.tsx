@@ -12,7 +12,7 @@ import { METRIC_ICON } from '@/constants/metric-icons';
 import { Radius, Spacing } from '@/constants/theme';
 import { alertDetail, alertHeadline } from '@/domain/alerts';
 import { formatAge, formatDateTime, formatNumber } from '@/domain/format';
-import { classify, METRIC_INFO, normalRangeText, type Level } from '@/domain/thresholds';
+import { classify, METRIC_INFO, normalRangeText, RANGES, type Level } from '@/domain/thresholds';
 import type { AppNotification } from '@/domain/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useDialog } from '@/hooks/use-dialog';
@@ -51,8 +51,11 @@ export default function NotificationsScreen() {
       const level: Level = n.kind === 'online' ? 'normal' : n.level ?? 'unknown';
       return { icon, headline: n.title, detail: n.body, level, label: null };
     }
-    const status = classify(n.metric, n.value);
-    const detail = alertDetail(n.metric, n.value);
+    // The limits it was raised with (the defaults before 0.9.4), so changing them later does not
+    // turn an old alert into "Normal".
+    const range = n.limits ?? RANGES[n.metric];
+    const status = classify(n.metric, n.value, range);
+    const detail = alertDetail(n.metric, n.value, range);
     return {
       icon: METRIC_ICON[n.metric],
       headline: alertHeadline(n.metric, status.label),
@@ -166,7 +169,7 @@ export default function NotificationsScreen() {
                     label="Reading"
                     value={`${formatNumber(open.value, METRIC_INFO[open.metric].decimals)}${METRIC_INFO[open.metric].unit ? ` ${METRIC_INFO[open.metric].unit}` : ''}`}
                   />
-                  <Detail label="Normal" value={normalRangeText(open.metric)} />
+                  <Detail label="Normal" value={normalRangeText(open.metric, open.limits ?? RANGES[open.metric])} />
                 </>
               ) : (
                 <ThemedText type="small" themeColor="textSecondary">{open.body}</ThemedText>

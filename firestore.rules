@@ -9,8 +9,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isNumberIn(v, lo, hi) {
+      return (v is int || v is float) && v >= lo && v <= hi;
+    }
+
     function isNullOrNumberIn(v, lo, hi) {
-      return v == null || ((v is int || v is float) && v >= lo && v <= hi);
+      return v == null || isNumberIn(v, lo, hi);
     }
 
     // One profile per account: name, PH mobile number and alert preferences. Personal data,
@@ -42,22 +46,12 @@ service cloud.firestore {
         && validProfile(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt;
 
-      // Last status per device and field, shared by all of the user's phones, so one ongoing
-      // condition raises one alert (domain/alerts.ts). Written in the same transaction as the alert.
+      // Last status per device and field (domain/alerts.ts), so one ongoing condition raises one
+      // alert. Written only by the backend, in the same transaction as the alert. Until app 0.9.4
+      // the open app wrote it too; it no longer may, because an app with the default limits built
+      // in would record levels that the station's own limits (devices/{id}.limits) do not give.
       match /alertState/{key} {
-        function validAlertState(s) {
-          return s.keys().hasOnly(['level', 'alertLevel', 'alertedAt', 'updatedAt'])
-            && s.keys().hasAll(['level', 'alertLevel', 'alertedAt', 'updatedAt'])
-            && s.level in ['normal', 'warning', 'critical']
-            && (s.alertLevel == null || s.alertLevel in ['warning', 'critical'])
-            && (s.alertedAt == null || s.alertedAt is timestamp)
-            && s.updatedAt == request.time;
-        }
-
         allow read: if isOwner();
-        allow create, update: if isOwner()
-          && key.matches('^[A-Za-z0-9-]+_(ph|temperatureC|nh3GasMv)$')
-          && validAlertState(request.resource.data);
       }
 
       // Push addresses (Firebase Cloud Messaging registration tokens) of the owner's phones. The
@@ -81,29 +75,12 @@ service cloud.firestore {
           && validPushToken(request.resource.data);
       }
 
-      // Alerts. Until Cloud Functions exist the app raises them itself while open, so the owner
-      // may create one - only for their own device, in the fixed shape, unread, and with an ID
-      // derived from the reading so two phones open at once cannot create duplicates.
+      // Alerts, raised only by the backend (functions/src/readings.ts, stations.ts; firebase-admin
+      // is not bound by these rules). Until app 0.9.4 the open app could create them too; no
+      // longer, so every alert follows the station's own limits (see alertState above).
       // The owner can mark them read and delete them.
       match /notifications/{notificationId} {
-        function validAlert(n) {
-          return n.keys().hasOnly(['title', 'body', 'deviceId', 'metric', 'value', 'level', 'readingId', 'createdAt', 'read'])
-            && n.keys().hasAll(['title', 'body', 'deviceId', 'metric', 'value', 'level', 'readingId', 'createdAt', 'read'])
-            && n.title is string && n.title.size() >= 1 && n.title.size() <= 80
-            && n.body is string && n.body.size() <= 200
-            && n.deviceId is string
-            && n.metric in ['ph', 'temperatureC', 'nh3GasMv']
-            && (n.value == null || n.value is int || n.value is float)
-            && n.level in ['warning', 'critical']
-            && n.readingId is string && n.readingId.size() >= 1 && n.readingId.size() <= 64
-            && notificationId == n.deviceId + '_' + n.metric + '_' + n.readingId
-            && n.createdAt == request.time
-            && n.read == false
-            && get(/databases/$(database)/documents/devices/$(n.deviceId)).data.ownerUid == uid;
-        }
-
         allow read: if isOwner();
-        allow create: if isOwner() && validAlert(request.resource.data);
         allow update: if isOwner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
           && request.resource.data.read is bool;
@@ -147,6 +124,31 @@ service cloud.firestore {
           );
       }
 
+      // Alert limits per sensor (domain/limits.ts, same checks as validRange there): within what
+      // the sensor can report, critical below <= normal from < normal to <= critical above, and
+      // ammonia gas on the high side only (its low limits 0). Stamped with server time.
+      function validRange(r, lo, hi) {
+        return r is map
+          && r.keys().hasOnly(['normalMin', 'normalMax', 'criticalBelow', 'criticalAbove'])
+          && r.keys().hasAll(['normalMin', 'normalMax', 'criticalBelow', 'criticalAbove'])
+          && isNumberIn(r.normalMin, lo, hi) && isNumberIn(r.normalMax, lo, hi)
+          && isNumberIn(r.criticalBelow, lo, hi) && isNumberIn(r.criticalAbove, lo, hi)
+          && r.criticalBelow <= r.normalMin
+          && r.normalMin < r.normalMax
+          && r.normalMax <= r.criticalAbove;
+      }
+
+      function validLimits(l) {
+        return l is map
+          && l.keys().hasOnly(['ph', 'temperatureC', 'nh3GasMv', 'updatedAt'])
+          && l.keys().hasAll(['ph', 'temperatureC', 'nh3GasMv', 'updatedAt'])
+          && validRange(l.ph, 0, 14)
+          && validRange(l.temperatureC, -10, 125)
+          && validRange(l.nh3GasMv, 0, 5500)
+          && l.nh3GasMv.normalMin == 0 && l.nh3GasMv.criticalBelow == 0
+          && l.updatedAt == request.time;
+      }
+
       // Devices (TubigTala Stations) are provisioned by an admin with ownerUid null and a pairing
       // code in devicePairing/{deviceId} (docs/device-setup.md). The name is fixed by the admin.
 
@@ -155,6 +157,13 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phCalibration'])
         && validCalibration(request.resource.data.phCalibration);
+
+      // The owner may set the station's alert limits, or remove them (back to the defaults).
+      // They stay with the station when it is removed, like its calibration.
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['limits'])
+        && (!('limits' in request.resource.data) || validLimits(request.resource.data.limits));
 
       // Pair: a signed-in user who has the code from the station's QR sticker takes a station that
       // has no owner. The code is checked against devicePairing, which no client can read.

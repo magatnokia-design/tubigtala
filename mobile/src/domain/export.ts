@@ -4,7 +4,8 @@
 import type { Cell, CellValue, Sheet } from '../lib/xlsx.ts';
 import { formatRange, isoLocal, type DayRange } from './dates.ts';
 import { insight } from './insights.ts';
-import { classify, METRIC_INFO, normalRangeText, type Level, type Metric } from './thresholds.ts';
+import { limitsOf, type Limits } from './limits.ts';
+import { classify, METRIC_INFO, normalRangeText, RANGES, type Level, type Metric, type Range } from './thresholds.ts';
 
 export const EXPORT_METRICS: Metric[] = ['ph', 'temperatureC', 'nh3GasMv'];
 
@@ -24,6 +25,8 @@ export interface ExportAlert {
   body: string;
   value: number | null;
   level: Level | null;
+  /** the limits the alert was checked against; null/missing = the defaults (alerts before 0.9.4) */
+  limits?: Range | null;
 }
 
 export interface ExportInput {
@@ -36,6 +39,10 @@ export interface ExportInput {
   generatedAt: number;
   /** true when the reading query hit its cap and older readings are missing */
   truncated: boolean;
+  /** the station's alert limits (limits.ts); the defaults when left out */
+  limits?: Limits;
+  /** true when the station has its own limits instead of the defaults */
+  customLimits?: boolean;
 }
 
 const statusStyle = (level: Level) => (level === 'critical' ? 'critical' : level === 'warning' ? 'warning' : level === 'normal' ? 'normal' : 'cell');
@@ -48,8 +55,11 @@ export function exportSheets(input: ExportInput): Sheet[] {
   const metrics = EXPORT_METRICS.filter((m) => input.metrics.includes(m));
   if (!metrics.length) throw new Error('Choose at least one field to export');
 
+  // Statuses use the station's limits as they are now (also for older readings in the range).
+  const limits = limitsOf(input);
   const notes: string[] = [];
   if (input.simulated) notes.push('Simulated device: values were generated for testing, not measured.');
+  if (input.customLimits) notes.push('Alert limits: this station uses its own limits (set in the app), shown as "Normal range"; every status uses them.');
   const phReadings = input.readings.filter((r) => r.ph !== null);
   const uncalibrated = phReadings.filter((r) => !r.phCalibrated).length;
   if (metrics.includes('ph') && uncalibrated > 0) {
@@ -72,7 +82,7 @@ export function exportSheets(input: ExportInput): Sheet[] {
     [],
     ['Field', 'Readings', 'Lowest', 'Average', 'Highest', 'Normal range'].map((h) => ({ v: h, s: 'header' as const })),
     ...metrics.map((m, i): Cell[] => {
-      const ins = insight(m, input.readings.map((r) => ({ t: r.t, v: r[m] })));
+      const ins = insight(m, input.readings.map((r) => ({ t: r.t, v: r[m] })), limits[m]);
       const d = METRIC_INFO[m].decimals;
       const valid = input.readings.map((r) => r[m]).filter((v): v is number => v !== null);
       const avg = valid.length ? Number((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(d)) : null;
@@ -82,7 +92,7 @@ export function exportSheets(input: ExportInput): Sheet[] {
         band(i, ins.min ? Number(ins.min.v.toFixed(d)) : null),
         band(i, avg),
         band(i, ins.max ? Number(ins.max.v.toFixed(d)) : null),
-        band(i, normalRangeText(m)),
+        band(i, normalRangeText(m, limits[m])),
       ];
     }),
   ];
@@ -108,7 +118,7 @@ export function exportSheets(input: ExportInput): Sheet[] {
       ...input.readings.map((r, i): Cell[] => [
         band(i, isoLocal(r.t)),
         ...metrics.flatMap((m): Cell[] => {
-          const st = classify(m, r[m]);
+          const st = classify(m, r[m], limits[m]);
           const cells: Cell[] = [band(i, r[m]), { v: r[m] === null ? 'No reading' : st.label, s: statusStyle(st.level) }];
           if (m === 'ph') cells.push(band(i, r.ph === null ? '' : r.phCalibrated ? 'Yes' : 'No'));
           return cells;
@@ -127,7 +137,7 @@ export function exportSheets(input: ExportInput): Sheet[] {
         band(i, isoLocal(a.t)),
         band(i, a.metric ? METRIC_INFO[a.metric].name : ''),
         band(i, a.value),
-        a.level && a.metric ? { v: classify(a.metric, a.value).label, s: statusStyle(a.level) } : band(i, ''),
+        a.level && a.metric ? { v: classify(a.metric, a.value, a.limits ?? RANGES[a.metric]).label, s: statusStyle(a.level) } : band(i, ''),
         band(i, `${a.title}${a.body ? ` - ${a.body}` : ''}`),
       ]),
       ...(input.alerts.length ? [] : [[{ v: 'No alerts in this period', s: 'cell' as const }]]),

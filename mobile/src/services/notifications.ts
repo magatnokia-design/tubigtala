@@ -1,5 +1,6 @@
 // Alerts (users/{uid}/notifications) and phone notifications.
-// Alerts are raised by services/alerts.ts (in a transaction with the shared alert state).
+// Alerts are raised by the backend only (functions/src/readings.ts and stations.ts; since 0.9.4
+// the app no longer raises any). The app lists them, marks them read and deletes them.
 import {
   collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc,
   Timestamp, updateDoc, where, writeBatch, type FirestoreError, type Unsubscribe,
@@ -7,6 +8,7 @@ import {
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
+import { rangeFromStored } from '@/domain/limits';
 import { pushTokenId } from '@/domain/push';
 import type { AppNotification } from '@/domain/types';
 import { db } from '@/services/firebase';
@@ -16,14 +18,17 @@ const inbox = (uid: string) => collection(db, 'users', uid, 'notifications');
 const METRICS = ['ph', 'temperatureC', 'nh3GasMv'] as const;
 
 function toNotification(id: string, d: Record<string, unknown>): AppNotification {
+  const metric = METRICS.find((m) => m === d.metric) ?? null;
   return {
     id,
     title: typeof d.title === 'string' ? d.title : 'Notification',
     body: typeof d.body === 'string' ? d.body : '',
     deviceId: typeof d.deviceId === 'string' ? d.deviceId : null,
-    metric: METRICS.find((m) => m === d.metric) ?? null,
+    metric,
     value: typeof d.value === 'number' ? d.value : null,
     level: d.level === 'warning' || d.level === 'critical' ? d.level : null,
+    // The limits stored with the alert (0.9.4+); invalid or missing = the defaults (null).
+    limits: metric ? rangeFromStored(metric, d.limits) : null,
     kind: d.kind === 'sensor' || d.kind === 'offline' || d.kind === 'online' ? d.kind : null,
     createdAtMs: d.createdAt instanceof Timestamp ? d.createdAt.toMillis() : 0,
     read: d.read === true,

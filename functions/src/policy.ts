@@ -2,7 +2,7 @@
 // so every rule here is unit-tested without Firebase. Which readings are normal/warning/critical
 // is NOT decided here: that is mobile/src/domain/thresholds.ts, shared with the app.
 import { formatNumber } from '../../mobile/src/domain/format.ts';
-import { classify, METRIC_INFO, RANGES, type Metric } from '../../mobile/src/domain/thresholds.ts';
+import { classify, METRIC_INFO, RANGES, type Metric, type Range } from '../../mobile/src/domain/thresholds.ts';
 
 /** SMS needs this many critical readings in a row, so one bad reading does not cost a text. */
 export const SMS_STREAK = 3;
@@ -30,10 +30,13 @@ export function smsMetricAllowed(metric: Metric, phCalibrated: boolean): boolean
   return metric === 'temperatureC' || (metric === 'ph' && phCalibrated);
 }
 
-/** True when the newest SMS_STREAK values (newest first) are all critical. Missing values break the streak. */
-export function isCriticalStreak(metric: Metric, newestFirst: unknown[]): boolean {
+/**
+ * True when the newest SMS_STREAK values (newest first) are all critical with the station's limits
+ * as they are now (`range`; the defaults when left out). Missing values break the streak.
+ */
+export function isCriticalStreak(metric: Metric, newestFirst: unknown[], range: Range = RANGES[metric]): boolean {
   if (newestFirst.length < SMS_STREAK) return false;
-  return newestFirst.slice(0, SMS_STREAK).every((v) => classify(metric, typeof v === 'number' ? v : null).level === 'critical');
+  return newestFirst.slice(0, SMS_STREAK).every((v) => classify(metric, typeof v === 'number' ? v : null, range).level === 'critical');
 }
 
 /** smsBudget/global - SMS sent per Philippine day and month, across all users and devices. */
@@ -67,6 +70,8 @@ export interface SmsItem {
   /** status word from classify(), e.g. "Too high" */
   label: string;
   value: number;
+  /** the station's limits it was checked against; the defaults when left out */
+  range?: Range;
 }
 
 const SMS_SUBJECT: Record<Metric, string> = { ph: 'pH', temperatureC: 'water', nh3GasMv: 'ammonia gas' };
@@ -80,11 +85,13 @@ const gsmSafe = (s: string) => s.replace(/[^A-Za-z0-9 .,:;()'!?#&+\-_/]/g, '').t
  * "TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM"
  */
 export function smsText(deviceName: string, items: SmsItem[], atMs: number): string {
-  const parts = items.map(({ metric, label, value }) => {
+  const parts = items.map(({ metric, label, value, range }) => {
     const { decimals } = METRIC_INFO[metric];
     const unit = metric === 'temperatureC' ? ' C' : '';
-    const [lo, hi] = RANGES[metric].normal;
-    return `${SMS_SUBJECT[metric]} ${label.toUpperCase()} ${formatNumber(value, decimals)}${unit} (normal ${lo}-${hi}${unit})`;
+    const [lo, hi] = (range ?? RANGES[metric]).normal;
+    // "20-32" normally; "-5 to 30" when a limit is below zero ("-5-30" would be unreadable).
+    const span = lo < 0 ? `${lo} to ${hi}` : `${lo}-${hi}`;
+    return `${SMS_SUBJECT[metric]} ${label.toUpperCase()} ${formatNumber(value, decimals)}${unit} (normal ${span}${unit})`;
   });
   return `TubigTala: ${gsmSafe(deviceName) || 'device'} ${parts.join('; ')} at ${manilaClock(atMs)}`;
 }

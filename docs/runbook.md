@@ -22,7 +22,7 @@ cd mobile;    npm install; cd ..
 cd functions; npm install; npm run build; cd ..
 ```
 
-The emulators also load the Cloud Functions from `functions\lib\`, so build them once (and again after changing `functions\src` or the shared `mobile\src\domain` files). Without a build the other emulators still run; the functions emulator reports an error and readings raise alerts only in the open app.
+The emulators also load the Cloud Functions from `functions\lib\`, so build them once (and again after changing `functions\src` or the shared `mobile\src\domain` files). Without a build the other emulators still run, but the functions emulator reports an error and no alerts are raised at all (since app 0.9.4 only the functions raise them).
 
 ## Run the app against simulated data
 

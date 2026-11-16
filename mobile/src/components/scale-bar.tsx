@@ -24,7 +24,8 @@ export function ScaleBar({ value, min, max, segments, labels }: {
     <View style={styles.wrap}>
       <View style={styles.track}>
         {segments.map((s, i) => (
-          <View key={s.until} style={{ width: `${widths[i]}%`, backgroundColor: s.color }} />
+          // Index key: with custom limits two segments can end at the same value (e.g. normal up to 14).
+          <View key={i} style={{ width: `${widths[i]}%`, backgroundColor: s.color }} />
         ))}
         {value !== null && (
           <View style={[styles.marker, { left: `${pct(value)}%`, borderColor: theme.background, backgroundColor: theme.text }]} />

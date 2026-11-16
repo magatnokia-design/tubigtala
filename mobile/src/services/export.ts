@@ -5,6 +5,7 @@ import * as Sharing from 'expo-sharing';
 
 import { endOfDay, type DayRange } from '@/domain/dates';
 import { exportFileName, exportSheets } from '@/domain/export';
+import { limitsOf } from '@/domain/limits';
 import type { Metric } from '@/domain/thresholds';
 import type { Device } from '@/domain/types';
 import { buildXlsx } from '@/lib/xlsx';
@@ -33,9 +34,11 @@ export async function exportToExcel(uid: string, device: Device, range: DayRange
     range,
     metrics,
     readings: readings.map((r) => ({ t: r.serverTimeMs, ph: r.ph, phCalibrated: r.phCalibrated, temperatureC: r.temperatureC, nh3GasMv: r.nh3GasMv })),
-    alerts: alerts.map((a) => ({ t: a.createdAtMs, metric: a.metric, title: a.title, body: a.body, value: a.value, level: a.level })),
+    alerts: alerts.map((a) => ({ t: a.createdAtMs, metric: a.metric, title: a.title, body: a.body, value: a.value, level: a.level, limits: a.limits })),
     generatedAt: Date.now(),
     truncated,
+    limits: limitsOf(device),
+    customLimits: device.customLimits === true,
   }));
 
   const fileName = exportFileName(device.name, range);
