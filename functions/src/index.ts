@@ -2,10 +2,12 @@
 // Region matches the Firestore database (asia-southeast1).
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { logger } from 'firebase-functions';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { providersFromEnv, pushOnlyProviders, TEXTBEE_API_KEY, TEXTBEE_DEVICE_ID } from './providers.ts';
+import { claimPushToken, releasePushToken } from './push-owners.ts';
 import { processReading } from './readings.ts';
 import { checkStationsOnce } from './stations.ts';
 
@@ -46,5 +48,29 @@ export const checkStations = onSchedule(
   },
   async () => {
     await checkStationsOnce({ db: getFirestore(), providers: pushOnlyProviders() });
+  },
+);
+
+// A phone belongs to the account that registered it last (push-owners.ts): when a phone registers,
+// it is removed from the account it was on before, so it never gets another account's alerts.
+export const onPushTokenWritten = onDocumentWritten(
+  {
+    document: 'users/{uid}/pushTokens/{tokenId}',
+    region: 'asia-southeast1',
+    memory: '256MiB',
+    maxInstances: 2,
+  },
+  async (event) => {
+    const { uid, tokenId } = event.params;
+    const after = event.data?.after;
+    if (after?.exists) {
+      const token = after.get('token');
+      if (typeof token !== 'string') return;
+      if (await claimPushToken(getFirestore(), uid, tokenId, token)) {
+        logger.info(`phone ${tokenId} registered on a new account: removed from the previous one`);
+      }
+    } else {
+      await releasePushToken(getFirestore(), uid, tokenId);
+    }
   },
 );
