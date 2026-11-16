@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import logoSymbol from '../../mobile/assets/brand/logo-symbol.svg';
 import logoMark from '../../mobile/assets/brand/logo-mark.svg';
-import { APK_URL, APP_VERSION, DISCLAIMER, features, installSteps, sensors, steps } from './content';
+import { APK_URL, APP_VERSION, DISCLAIMER, features, installSteps, screens, sensors, steps } from './content';
 
 const Icon = ({ name }: { name: string }) => <span className="icon" aria-hidden="true">{name}</span>;
 
@@ -30,28 +30,14 @@ function seenSplash(): boolean {
   try { return sessionStorage.getItem('tubigtala-splash') === '1'; } catch { return false; }
 }
 
-/** Illustration of the Water tab, drawn with the app's colours - not live data. */
-function PhoneMock() {
-  const cards = [
-    { icon: 'device_thermostat', name: 'Temperature', value: '25.3', unit: '°C', level: 'Normal', tone: 'normal' },
-    { icon: 'water_ph', name: 'pH level', value: '7.2', unit: '', level: 'Normal', tone: 'normal' },
-    { icon: 'air', name: 'Ammonia gas', value: '1,820', unit: 'mV', level: 'A bit high', tone: 'warning' },
-  ];
+/** A real screenshot of the app in a phone frame (content.ts `screens`). */
+function Screenshot({ shot, caption, lazy = true }: { shot: (typeof screens)[number]; caption: string; lazy?: boolean }) {
   return (
-    <figure className="phone" aria-label="Illustration of the TubigTala app's Water screen">
+    <figure className="phone">
       <div className="phone-screen">
-        <div className="phone-header">Water</div>
-        <div className="phone-cards">
-          {cards.map((c) => (
-            <div key={c.name} className="mock-card">
-              <div className="mock-top"><Icon name={c.icon} /><span>{c.name}</span><span className={`chip chip-${c.tone}`}>{c.level}</span></div>
-              <div className="mock-value">{c.value}<small>{c.unit}</small></div>
-            </div>
-          ))}
-        </div>
-        <div className="phone-tabs"><Icon name="monitoring" /><span className="tab-centre"><Icon name="water_drop" /></span><Icon name="settings" /></div>
+        <img src={shot.src} alt={shot.alt} width={720} height={1536} loading={lazy ? 'lazy' : 'eager'} decoding="async" />
       </div>
-      <figcaption>Illustration</figcaption>
+      <figcaption>{caption}</figcaption>
     </figure>
   );
 }
@@ -116,7 +102,7 @@ export function App() {
                 <span className="version">Android · version {APP_VERSION} · free</span>
               </div>
             </div>
-            <PhoneMock />
+            <Screenshot shot={screens[0]} caption="Screenshot of the app" lazy={false} />
           </div>
         </section>
 
@@ -157,6 +143,16 @@ export function App() {
                 </li>
               ))}
             </ul>
+          </div>
+        </section>
+
+        <section id="screens" className="section">
+          <div className="wrap">
+            <p className="kicker">A look inside</p>
+            <h2>The app on a phone</h2>
+            <div className="shots">
+              {screens.map((s) => <Screenshot key={s.src} shot={s} caption={s.caption} />)}
+            </div>
           </div>
         </section>
 

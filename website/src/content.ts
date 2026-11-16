@@ -28,6 +28,17 @@ export const features = [
 ];
 
 /**
+ * Real screenshots of the app (website/public/screens, 720 x 1536): the phone's status bar
+ * cropped off, personal details blurred (Settings). Taken 16 Nov 2026 with app 0.9.2 - retake
+ * Analytics with 0.9.3+ (no high / low lines since then).
+ */
+export const screens = [
+  { src: '/screens/water.jpg', caption: 'Live readings in plain words', alt: 'TubigTala Water screen: pH 6.9, temperature 25.0 °C and ammonia gas 1619 mV, each marked Normal on a coloured scale' },
+  { src: '/screens/analytics.jpg', caption: 'Charts for the last hour, any day or a week', alt: 'TubigTala Analytics screen: last-hour charts of pH, temperature and ammonia gas' },
+  { src: '/screens/settings.jpg', caption: 'SMS and phone alerts, your station, pH calibration', alt: 'TubigTala Settings screen: SMS alerts, the TubigTala Station shown Live, pH calibration and phone notifications (personal details blurred)' },
+] as const;
+
+/**
  * Gauges use the app's own scale colours and normal ranges (mobile/src/domain/thresholds.ts):
  * the bar runs min..max, the bright window is the normal range.
  */
