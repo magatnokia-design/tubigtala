@@ -6,12 +6,12 @@
  * TubigTala.apk, so this always gets the newest. The page links only to the file itself.
  */
 export const APK_URL = 'https://github.com/magatnokia-design/tubigtala/releases/latest/download/TubigTala.apk';
-export const APP_VERSION = '0.9.3';
+export const APP_VERSION = '0.9.5';
 
 export const steps = [
   { icon: 'sensors', title: 'The station measures', text: 'An ESP32 station at your tank reads the water temperature, the pH, and the ammonia gas in the air above the water - every minute.' },
   { icon: 'cloud_upload', title: 'It uploads securely', text: 'Each reading goes over Wi-Fi to the cloud (Firebase), signed in as your own station. Only you can see your data.' },
-  { icon: 'smartphone', title: 'Your phone shows it', text: 'The TubigTala app shows live values in plain words - Normal, A bit high, Too high - with history and alerts.' },
+  { icon: 'smartphone', title: 'Your phone shows it', text: 'The TubigTala app shows live values in plain words - Normal, A bit acidic, Too hot - with history and alerts.' },
 ];
 
 export const features = [
@@ -19,7 +19,12 @@ export const features = [
   // SMS rule as in functions/src/policy.ts: temperature, or pH once calibrated, critical for
   // SMS_STREAK (3) readings in a row. Both channels verified 16 Nov 2026 with the app closed
   // (push from the server via Firebase Cloud Messaging, app 0.9.2+).
-  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, even when the app is closed, and an SMS when the temperature or the calibrated pH stays critical for three readings in a row.' },
+  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, even when the app is closed, with the reading in plain words ("water too acidic, pH 5.8"), and an SMS when the temperature or the calibrated pH stays critical for three readings in a row.' },
+  // Settings > Station > Alert limits (app 0.9.4+, devices/{id}.limits, mobile/src/domain/limits.ts).
+  { icon: 'tune', title: 'Your own alert limits', text: 'Keep the tap-water defaults, or set the normal range and the critical limits of each sensor for your station.' },
+  // functions/src/stations.ts + readings.ts trackMissing (16 Nov 2026; offline verified live that day) and
+  // the gas warm-up (mobile/src/domain/warmup.ts, app 0.9.5).
+  { icon: 'sensors', title: 'Station health', text: 'A notification when the station goes offline or comes back, or a sensor stops reading. The gas sensor gets 15 minutes to warm up after power-on.' },
   // Matches the app's Analytics cards since 0.9.3 (no high / low lines; one summary line).
   { icon: 'monitoring', title: 'Charts and insights', text: 'The last hour live, or any day or week since data started, with how much of the time each reading was normal and which way it moved.' },
   { icon: 'download', title: 'Excel export', text: 'Pick today, one day or a date range and save the readings as a spreadsheet.' },
@@ -39,7 +44,8 @@ export const screens = [
 ] as const;
 
 /**
- * Gauges use the app's own scale colours and normal ranges (mobile/src/domain/thresholds.ts):
+ * Gauges use the app's own scale colours and DEFAULT normal ranges (mobile/src/domain/thresholds.ts
+ * RANGES; owners can set their own since app 0.9.4). pH words as in the app since 0.9.5 (acidic / alkaline):
  * the bar runs min..max, the bright window is the normal range.
  */
 export const sensors = [
@@ -50,7 +56,7 @@ export const sensors = [
   },
   {
     icon: 'water_ph', name: 'pH level', part: 'PH-4502C board and glass probe', where: 'In the water',
-    normal: '6.5 – 8.5', min: 0, max: 14, lo: 6.5, hi: 8.5, ticks: ['0 acidic', '14 basic'], gradient: ['scaleAcid', 'scaleNeutral', 'scaleBase'],
+    normal: '6.5 – 8.5', min: 0, max: 14, lo: 6.5, hi: 8.5, ticks: ['0 acidic', '14 alkaline'], gradient: ['scaleAcid', 'scaleNeutral', 'scaleBase'],
     note: 'Calibrated in the app with 6.86 and 4.01 buffer solutions.',
   },
   {
