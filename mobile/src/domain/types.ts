@@ -1,5 +1,7 @@
 // App-side shapes of the Firestore documents in docs/data-model.md.
 // Sensor values stay `number | null`: null means "no valid reading", never 0.
+import type { Limits } from './limits.ts';
+import type { Range } from './thresholds.ts';
 
 export type PhCalibrationStatus = 'uncalibrated' | 'calibrated';
 
@@ -24,6 +26,15 @@ export interface Device {
   pairedAtMs: number | null;
   /** May be missing in data cached by an older app version - treat as uncalibrated. */
   phCalibration?: PhCalibration;
+  /**
+   * Alert limits (devices/{id}.limits, limits.ts): the station's own, or the defaults. Missing in
+   * data cached by app versions before 0.9.4 - read it with limitsOf(device), never directly.
+   */
+  limits?: Limits;
+  /** true when the station has its own limits (not the defaults) */
+  customLimits?: boolean;
+  /** when the owner last saved them; null for the defaults */
+  limitsUpdatedAtMs?: number | null;
 }
 
 /** users/{uid} (docs/data-model.md). */
@@ -35,7 +46,7 @@ export interface Profile {
   pushEnabled: boolean;
 }
 
-/** users/{uid}/notifications/{id}: alerts (raised by the app while open, later by the backend). */
+/** users/{uid}/notifications/{id}: alerts, raised by the backend (functions/src/readings.ts, stations.ts). */
 export interface AppNotification {
   id: string;
   title: string;
@@ -44,6 +55,11 @@ export interface AppNotification {
   metric: 'ph' | 'temperatureC' | 'nh3GasMv' | null;
   value: number | null;
   level: 'warning' | 'critical' | null;
+  /**
+   * The limits this alert was checked against (the station's at that time), so its status words and
+   * normal range stay as they were when the limits change. null = the defaults (alerts before 0.9.4).
+   */
+  limits: Range | null;
   /**
    * Station health alerts from the backend (docs/data-model.md): a sensor without values,
    * the station offline, or back online. null = an alert about a reading's value.

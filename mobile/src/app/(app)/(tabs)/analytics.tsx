@@ -20,7 +20,8 @@ import { endOfDay, formatRange, startOfDay, type DayRange } from '@/domain/dates
 import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
 import { insight, insightSentence } from '@/domain/insights';
 import { STALE_AFTER_INTERVALS } from '@/domain/status';
-import { classify, METRIC_INFO, RANGES, type Metric } from '@/domain/thresholds';
+import { limitsOf } from '@/domain/limits';
+import { classify, METRIC_INFO, type Metric, type Range } from '@/domain/thresholds';
 import type { Reading } from '@/domain/types';
 import { useAppActive } from '@/hooks/use-app-active';
 import { useReadingsBetween } from '@/hooks/use-devices';
@@ -147,7 +148,8 @@ export default function AnalyticsScreen() {
         )}
 
         {METRICS.map(({ metric, icon }) => (
-          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} intervalSec={device?.readingIntervalSec ?? 60} />
+          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} intervalSec={device?.readingIntervalSec ?? 60}
+            limits={limitsOf(device)[metric]} />
         ))}
       </ScrollView>
 
@@ -163,14 +165,17 @@ export default function AnalyticsScreen() {
   );
 }
 
-function MetricChart({ metric, icon, readings, multiDay, intervalSec }: { metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean; intervalSec: number }) {
+/** `limits`: the station's alert limits for this sensor (limits.ts), for the status, the normal band and the insight. */
+function MetricChart({ metric, icon, readings, multiDay, intervalSec, limits }: {
+  metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean; intervalSec: number; limits: Range;
+}) {
   const theme = useTheme();
   const info = METRIC_INFO[metric];
   const points = useMemo(() => readings.map((r) => ({ t: r.serverTimeMs, v: r[metric] })), [readings, metric]);
-  const ins = useMemo(() => insight(metric, points), [metric, points]);
+  const ins = useMemo(() => insight(metric, points, limits), [metric, points, limits]);
   // The big number and its status are the newest reading, as on the Water tab. When that reading
   // has no value, show "—" and say when the last value was, rather than passing it off as current.
-  const status = classify(metric, ins.newest?.v ?? null);
+  const status = classify(metric, ins.newest?.v ?? null, limits);
   const showLastValid = ins.newest?.v === null && ins.latest !== null;
   const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
   const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
@@ -196,7 +201,7 @@ function MetricChart({ metric, icon, readings, multiDay, intervalSec }: { metric
         </ThemedText>
       )}
 
-      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={RANGES[metric].normal}
+      <LineChart points={points} decimals={info.decimals} gradientId={`grad-${metric}`} band={limits.normal}
         // Same rule as the stale status (domain/status.ts): no reading for 3 intervals = a gap.
         gapMs={STALE_AFTER_INTERVALS * intervalSec * 1000} />
 

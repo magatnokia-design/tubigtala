@@ -179,6 +179,15 @@ export default function SettingsScreen() {
               onPress={() => router.push('/calibrate-ph')}
               chevron
             />
+            <Row
+              icon="tune"
+              label="Alert limits"
+              value={device.customLimits
+                ? `Your own limits${device.limitsUpdatedAtMs ? ` · set ${formatDay(device.limitsUpdatedAtMs)}` : ''}`
+                : 'Default · choose when to be warned'}
+              onPress={() => router.push('/alert-limits')}
+              chevron
+            />
             <Row icon="link_off" label="Remove station" danger onPress={() => confirmRemove(device.id, device.name)} />
           </Section>
         )}

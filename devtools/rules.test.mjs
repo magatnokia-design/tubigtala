@@ -138,6 +138,54 @@ test('buffer values outside 6.5-7.5 / 3.5-4.5 are rejected', async () => {
 test('owner still cannot change other device fields with a calibration', () =>
   assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { phCalibration: calibration(), deviceUid: 'owner' })));
 
+// --- alert limits (devices/{id}.limits, domain/limits.ts) ---
+const range = (normalMin, normalMax, criticalBelow, criticalAbove) => ({ normalMin, normalMax, criticalBelow, criticalAbove });
+const limits = (o = {}) => ({
+  ph: range(6.8, 8.0, 6.5, 8.5), temperatureC: range(22, 30, 18, 34), nh3GasMv: range(0, 1600, 0, 2000),
+  updatedAt: serverTimestamp(), ...o,
+});
+const setLimits = (uid, l, device = DEVICE) => updateDoc(doc(as(uid), `devices/${device}`), { limits: l });
+
+test('owner can save alert limits, change them, and go back to the defaults', async () => {
+  await assertSucceeds(setLimits('owner', limits()));
+  await assertSucceeds(setLimits('owner', limits({ ph: range(6.5, 8.5, 6, 9) })));
+  await assertSucceeds(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { limits: deleteField() }));
+});
+test('only the owner sets alert limits: not a stranger, not the station itself', async () => {
+  await assertFails(setLimits('stranger', limits()));
+  await assertFails(setLimits('board', limits()));
+  await assertFails(setLimits('owner', limits(), 'other'));
+  await assertFails(setLimits('owner', limits(), 'free'), 'an unpaired station has no owner to set them');
+});
+test('alert limits must be in order', async () => {
+  await assertFails(setLimits('owner', limits({ ph: range(8.0, 6.8, 6.5, 8.5) })), 'normal reversed');
+  await assertFails(setLimits('owner', limits({ ph: range(7, 7, 6.5, 8.5) })), 'normal with no width');
+  await assertFails(setLimits('owner', limits({ ph: range(6.8, 8.0, 6.9, 8.5) })), 'critical low above normal low');
+  await assertFails(setLimits('owner', limits({ ph: range(6.8, 8.0, 6.5, 7.9) })), 'critical high below normal high');
+  await assertSucceeds(setLimits('owner', limits({ ph: range(6.8, 8.0, 6.8, 8.0) })), 'equal = no warning band');
+});
+test('alert limits must be within what each sensor can report', async () => {
+  await assertFails(setLimits('owner', limits({ ph: range(6.8, 8.0, 6.5, 14.5) })));
+  await assertFails(setLimits('owner', limits({ temperatureC: range(22, 30, -11, 34) })));
+  await assertSucceeds(setLimits('owner', limits({ temperatureC: range(-5, 30, -10, 125) })));
+  await assertFails(setLimits('owner', limits({ nh3GasMv: range(0, 1600, 0, 6000) })));
+  await assertFails(setLimits('owner', limits({ nh3GasMv: range(100, 1600, 0, 2000) })), 'gas has a high side only');
+  await assertFails(setLimits('owner', limits({ ph: range('6.8', 8.0, 6.5, 8.5) })), 'numbers only');
+});
+test('alert limits need all three sensors, the fixed shape and server time', async () => {
+  const { nh3GasMv, ...noGas } = limits();
+  void nh3GasMv;
+  await assertFails(setLimits('owner', noGas));
+  await assertFails(setLimits('owner', limits({ salinity: range(0, 1, 0, 1) })));
+  await assertFails(setLimits('owner', limits({ ph: { ...range(6.8, 8.0, 6.5, 8.5), extra: 1 } })));
+  await assertFails(setLimits('owner', limits({ updatedAt: Timestamp.fromMillis(0) })));
+  await assertFails(setLimits('owner', 'loose'));
+});
+test('saving alert limits cannot change anything else on the station', async () => {
+  await assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { limits: limits(), deviceUid: 'owner' }));
+  await assertFails(updateDoc(doc(as('owner'), `devices/${DEVICE}`), { limits: limits(), phCalibration: calibration() }));
+});
+
 // --- readings: read ---
 test('owner can read readings', () => assertSucceeds(getDoc(doc(as('owner'), path('seed-0')))));
 test('stranger cannot read readings', () => assertFails(getDoc(doc(as('stranger'), path('seed-0')))));
@@ -221,23 +269,12 @@ function alert(overrides = {}) {
 }
 const alertPath = (uid, a = alert()) => `users/${uid}/notifications/${a.deviceId}_${a.metric}_${a.readingId}`;
 
-test('owner can raise a valid alert for their own device', () =>
-  assertSucceeds(setDoc(doc(as('owner'), alertPath('owner')), alert())));
-test('the same alert cannot be raised twice (dedupe)', async () => {
-  await assertSucceeds(setDoc(doc(as('owner'), alertPath('owner')), alert()));
+// Since app 0.9.4 only the backend raises alerts (with the station's own limits); an app - even an
+// old one with the default limits built in - cannot create one, however well-formed.
+test('the app cannot raise alerts, not even for its own device (server only since 0.9.4)', async () => {
   await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert()));
-});
-test('cannot raise an alert for someone else\'s device', () =>
-  assertFails(setDoc(doc(as('stranger'), alertPath('stranger')), alert())));
-test('cannot raise an alert in another user\'s inbox', () =>
-  assertFails(setDoc(doc(as('stranger'), alertPath('owner')), alert())));
-test('alert ID must match device, metric and reading', () =>
-  assertFails(setDoc(doc(as('owner'), `users/owner/notifications/${DEVICE}_ph_other`), alert())));
-test('alert must start unread with server time and a known level', async () => {
-  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ read: true })));
-  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ createdAt: Timestamp.fromMillis(0) })));
-  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ level: 'normal' })));
-  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ extra: 1 })));
+  await assertFails(setDoc(doc(as('stranger'), alertPath('owner')), alert()));
+  await assertFails(setDoc(doc(as('owner'), alertPath('owner')), alert({ limits: { normalMin: 6.5, normalMax: 8.5, criticalBelow: 6, criticalAbove: 9 } })));
 });
 
 test('owner can read, mark read and delete own notifications; others cannot', async () => {
@@ -285,21 +322,17 @@ test('push tokens must have the fixed shape', async () => {
 const stateDoc = (uid, key = `${DEVICE}_ph`) => `users/${uid}/alertState/${key}`;
 const alertState = (o = {}) => ({ level: 'critical', alertLevel: 'critical', alertedAt: serverTimestamp(), updatedAt: serverTimestamp(), ...o });
 
-test('owner can write and read own alert state', async () => {
-  await assertSucceeds(setDoc(doc(as('owner'), stateDoc('owner')), alertState()));
-  await assertSucceeds(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'normal' })));
+test('alert state: the owner can read it, but only the backend writes it (since 0.9.4)', async () => {
+  await env.withSecurityRulesDisabled((ctx) =>
+    setDoc(doc(ctx.firestore(), stateDoc('owner')), { ...alertState(), alertedAt: Timestamp.now(), updatedAt: Timestamp.now() }));
   await assertSucceeds(getDoc(doc(as('owner'), stateDoc('owner'))));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'normal' })));
+  await assertFails(setDoc(doc(as('owner'), stateDoc('owner', `${DEVICE}_temperatureC`)), alertState()));
+  await assertFails(deleteDoc(doc(as('owner'), stateDoc('owner'))));
 });
 test('others cannot read or write the owner alert state', async () => {
   await assertFails(setDoc(doc(as('stranger'), stateDoc('owner')), alertState()));
   await assertFails(getDoc(doc(as('stranger'), stateDoc('owner'))));
-});
-test('alert state must be well-formed', async () => {
-  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ level: 'unknown' })));
-  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ alertLevel: 'normal' })));
-  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ updatedAt: Timestamp.fromMillis(0) })));
-  await assertFails(setDoc(doc(as('owner'), stateDoc('owner')), alertState({ extra: true })));
-  await assertFails(setDoc(doc(as('owner'), stateDoc('owner', `${DEVICE}_salinity`)), alertState()));
 });
 
 // --- server-only records (Cloud Functions, firebase-admin bypasses rules) ---

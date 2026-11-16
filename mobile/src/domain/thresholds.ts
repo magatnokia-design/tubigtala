@@ -1,6 +1,8 @@
 // Alert ranges: the one place that decides whether a reading is normal, a warning or
 // critical. The Water cards, alerts, Analytics insights and Excel export all use this, so
-// they cannot disagree. The Cloud Functions compile this same file (functions/tsconfig.json), so
+// they cannot disagree. RANGES are the defaults; a station's owner can set the station's own
+// limits (Settings > Alert limits, stored on the station: limits.ts), which every caller passes
+// in as `range`, so the app and the server still classify with the same numbers. The Cloud Functions compile this same file (functions/tsconfig.json), so
 // keep it free of app-only imports (React Native, Expo, @/ paths) - as alerts.ts and format.ts.
 //
 // Water type: fresh / tap water (decided 4 Nov 2026). pH 6.5-8.5 is the usual drinking-water
@@ -21,6 +23,7 @@ export interface Range {
   warning: [number, number];
 }
 
+/** The default limits, for any station (or sensor) without its own (limits.ts). */
 export const RANGES: Record<Metric, Range> = {
   ph: { normal: [6.5, 8.5], warning: [6.0, 9.0] },
   temperatureC: { normal: [20, 32], warning: [15, 35] },
@@ -42,9 +45,10 @@ export interface Status {
   label: string;
 }
 
-export function classify(metric: Metric, value: number | null): Status {
+/** `range`: the station's limits for this sensor (limits.ts limitsOf); the defaults when left out. */
+export function classify(metric: Metric, value: number | null, range: Range = RANGES[metric]): Status {
   if (value === null || !Number.isFinite(value)) return { level: 'unknown', label: 'No reading' };
-  const { normal, warning } = RANGES[metric];
+  const { normal, warning } = range;
   const info = METRIC_INFO[metric];
   if (value >= normal[0] && value <= normal[1]) return { level: 'normal', label: 'Normal' };
   const low = value < normal[0];
@@ -60,11 +64,13 @@ export function isEscalation(previous: Level, next: Level): boolean {
   return SEVERITY[next] > SEVERITY[previous];
 }
 
-/** "6.5 to 8.5" / "20 to 32 °C" / "up to 600 mV": the normal range in words, for alerts, the alert details and exports. */
-export function normalRangeText(metric: Metric): string {
-  const { normal } = RANGES[metric];
+/** "6.5 to 8.5" / "20 to 32 °C" / "up to 1700 mV": the normal range in words, for alerts, the alert details and exports. */
+export function normalRangeText(metric: Metric, range: Range = RANGES[metric]): string {
+  const { normal } = range;
   const { unit, decimals } = METRIC_INFO[metric];
-  const n = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(decimals));
+  // Both ends alike: "6.8 to 8.0" (not "6.8 to 8"), "20 to 32" (not "20.0 to 32.0").
+  const plain = Number.isInteger(normal[0]) && Number.isInteger(normal[1]);
+  const n = (v: number) => (plain ? String(v) : v.toFixed(decimals));
   const lo = metric === 'nh3GasMv' ? 'up to' : `${n(normal[0])} to`;
   return `${lo} ${n(normal[1])}${unit ? ` ${unit}` : ''}`;
 }

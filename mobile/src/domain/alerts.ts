@@ -1,14 +1,15 @@
-// When an alert is raised: one decision, used by the app and by the Cloud Functions (functions/).
+// When an alert is raised: one decision, made by the Cloud Functions (functions/src/readings.ts;
+// since app 0.9.4 only the server raises alerts) and unit-tested here with the rest of the domain.
 // A condition raises one alert when it gets worse; a value bouncing across a limit does not
 // re-alert within the cooldown unless it gets worse than what was already alerted.
 import { formatNumber } from './format.ts';
-import { METRIC_INFO, normalRangeText, type Level, type Metric } from './thresholds.ts';
+import { METRIC_INFO, normalRangeText, RANGES, type Level, type Metric, type Range } from './thresholds.ts';
 
 export const ALERT_COOLDOWN_MS = 30 * 60_000;
 
 const SEVERITY: Record<Level, number> = { unknown: 0, normal: 0, warning: 1, critical: 2 };
 
-/** users/{uid}/alertState/{deviceId}_{metric} - shared by all of the user's phones. */
+/** users/{uid}/alertState/{deviceId}_{metric} - written by the server only (since 0.9.4). */
 export interface AlertState {
   /** last status seen for this device and field */
   level: 'normal' | 'warning' | 'critical';
@@ -30,8 +31,8 @@ export function shouldAlert(state: AlertState | null, next: Level, nowMs: number
 
 /**
  * What a new status means for users/{uid}/alertState: nothing changed, the level changed
- * (update the record only), or raise an alert. Used by the app (services/alerts.ts) and the
- * Cloud Function (functions/src/readings.ts) inside their transactions, so both decide the same.
+ * (update the record only), or raise an alert. Used by the Cloud Function
+ * (functions/src/readings.ts) inside its transaction (until 0.9.4 the open app did the same).
  * `state` in an update/raise is what to store; for a raise, alertedAtMs is `nowMs`.
  */
 export type AlertStep =
@@ -67,18 +68,22 @@ export function alertHeadline(metric: Metric, label: string): string {
   return metric === 'ph' ? text : text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The reading and its normal range in one line: "33.4 °C · normal 20 to 32 °C". */
-export function alertDetail(metric: Metric, value: number | null): string {
+/** The reading and its normal range in one line: "33.4 °C · normal 20 to 32 °C". `range`: the limits it was checked against. */
+export function alertDetail(metric: Metric, value: number | null, range: Range = RANGES[metric]): string {
   const info = METRIC_INFO[metric];
-  return `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''} · normal ${normalRangeText(metric)}`;
+  return `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''} · normal ${normalRangeText(metric, range)}`;
 }
 
 /**
  * Title and body of an alert, written so the title alone says what is wrong:
  * "Tank 1: pH too high" / "pH is 9.4. Normal is 6.5 to 8.5."
  * Caveats come last: uncalibrated pH (CLAUDE.md: never assume calibration) and simulated data.
+ * `opts.range`: the station's limits for this sensor (limits.ts); the defaults when left out.
  */
-export function alertText(metric: Metric, label: string, value: number | null, deviceName: string, opts: { simulated: boolean; uncalibrated: boolean }) {
+export function alertText(
+  metric: Metric, label: string, value: number | null, deviceName: string,
+  opts: { simulated: boolean; uncalibrated: boolean; range?: Range },
+) {
   const info = METRIC_INFO[metric];
   const subject = SUBJECT[metric];
   const shown = `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
@@ -88,6 +93,6 @@ export function alertText(metric: Metric, label: string, value: number | null, d
   ].filter(Boolean);
   return {
     title: `${deviceName}: ${subject.title} ${label.toLowerCase()}`,
-    body: [`${subject.sentence} is ${shown}.`, `Normal is ${normalRangeText(metric)}.`, ...notes].join(' '),
+    body: [`${subject.sentence} is ${shown}.`, `Normal is ${normalRangeText(metric, opts.range ?? RANGES[metric])}.`, ...notes].join(' '),
   };
 }

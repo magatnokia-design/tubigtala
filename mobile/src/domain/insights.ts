@@ -1,6 +1,6 @@
 // Short, factual sentences about a series of readings for the Analytics cards.
 // Missing readings are left out, never counted as zero.
-import { classify, METRIC_INFO, type Metric } from './thresholds.ts';
+import { classify, METRIC_INFO, RANGES, type Metric, type Range } from './thresholds.ts';
 
 export interface Sample {
   t: number;
@@ -24,7 +24,8 @@ export interface Insight {
   count: number;
 }
 
-export function insight(metric: Metric, samples: Sample[]): Insight {
+/** `range`: the station's limits for this sensor (limits.ts limitsOf), for "normal X% of the time". */
+export function insight(metric: Metric, samples: Sample[], range: Range = RANGES[metric]): Insight {
   const newestRaw = samples.length ? samples[samples.length - 1] : null;
   const newest = newestRaw && { t: newestRaw.t, v: newestRaw.v !== null && Number.isFinite(newestRaw.v) ? newestRaw.v : null };
   const valid = samples.filter((s): s is { t: number; v: number } => s.v !== null && Number.isFinite(s.v));
@@ -35,7 +36,7 @@ export function insight(metric: Metric, samples: Sample[]): Insight {
   for (const s of valid) {
     if (s.v < min.v) min = s;
     if (s.v > max.v) max = s;
-    if (classify(metric, s.v).level === 'normal') normal++;
+    if (classify(metric, s.v, range).level === 'normal') normal++;
   }
   return {
     normalPct: Math.round((normal / valid.length) * 100),

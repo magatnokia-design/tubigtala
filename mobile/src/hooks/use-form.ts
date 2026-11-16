@@ -23,5 +23,11 @@ export function useForm<F extends string>(initial: Record<F, string>, validators
     return (Object.keys(values) as F[]).every((f) => !errorOf(f));
   }
 
-  return { values, errors, set, blur, validateAll };
+  /** Replaces every value (e.g. "Reset to defaults") and hides errors again. */
+  const reset = useCallback((next: Record<F, string>) => {
+    setValues(next);
+    setTouched({});
+  }, []);
+
+  return { values, errors, set, blur, validateAll, reset };
 }

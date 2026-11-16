@@ -1,16 +1,17 @@
 // What happens when a device uploads a reading (docs/data-model.md, "Alert policy"):
-//  1. Each field is classified with the app's own thresholds and run through the same
-//     alertState transaction as the app (domain/alerts.ts nextAlertStep), writing the in-app
-//     alert with the same document ID. The app may still raise alerts while open; whichever
-//     commits first wins and the other sees the updated state, so there is one alert either way.
-//  2. If this reading has an alert (raised here or by the app): one phone push per alert to the
-//     owner's registered phones (users/{uid}/pushTokens), when phone notifications are on.
+//  1. Each field is classified with the app's own rule (domain/thresholds.ts) against the station's
+//     alert limits (devices/{id}.limits via domain/limits.ts limitsFromDoc: the owner's own limits,
+//     or the defaults for any sensor without valid ones) and run through the alertState transaction
+//     (domain/alerts.ts nextAlertStep), writing the in-app alert. Since app 0.9.4 only this function
+//     raises alerts (the rules no longer let the app write alerts or alertState), so an old app
+//     with the default limits built in cannot raise alerts the owner's limits would not.
+//  2. If this reading has an alert: one phone push per alert to the owner's registered phones
+//     (users/{uid}/pushTokens), when phone notifications are on.
 //  3. If a field is critical, pH (calibrated) or temperature, for SMS_STREAK readings in a row:
 //     one SMS per alert episode, within the account-wide day/month caps.
 //  4. A field with no value: after SENSOR_MISSING_MS without one, one "sensor not reading" alert
-//     (push only), tracked in the same alertState document (missingSince, missingAlertedAt). The
-//     app never writes those two fields, and its own set() of that document only happens when a
-//     value is back, which ends the episode anyway. Station offline: stations.ts.
+//     (push only), tracked in the same alertState document (missingSince, missingAlertedAt).
+//     Station offline: stations.ts.
 // No email (dropped 13 Nov 2026): alerts reach the user as in-app/phone notifications and SMS.
 // Deliveries are recorded in alertDeliveries/{id}, created before sending: a second run for the
 // same reading or episode finds the record and sends nothing. The app cannot read these records.
@@ -18,6 +19,7 @@ import { FieldValue, Timestamp, type DocumentData, type DocumentReference, type 
 import { logger } from 'firebase-functions';
 
 import { alertText, nextAlertStep, type AlertState } from '../../mobile/src/domain/alerts.ts';
+import { limitsFromDoc, toStored } from '../../mobile/src/domain/limits.ts';
 import { classify, type Metric } from '../../mobile/src/domain/thresholds.ts';
 import { missingStep, sensorMissingText } from './health.ts';
 import {
@@ -75,7 +77,10 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
   const deviceName: string = typeof device.name === 'string' ? device.name : deviceId;
   const simulated = device.simulated === true || reading.simulated === true;
   const phCalibrated = reading.phCalibrated === true;
-  // Server time of the reading drives the cooldown, as in the app. Fall back to now if missing.
+  // The owner's alert limits, sensor by sensor (invalid or missing = the defaults), read from the
+  // device record already loaded above: no extra document read.
+  const { limits } = limitsFromDoc(device.limits);
+  // Server time of the reading drives the cooldown. Fall back to now if missing.
   const readingMs = reading.serverTime instanceof Timestamp ? reading.serverTime.toMillis() : (deps.nowMs ?? Date.now)();
 
   const critical: (SmsItem & { alertedAtMs: number })[] = [];
@@ -83,7 +88,8 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
 
   for (const metric of METRICS) {
     const value = typeof reading[metric] === 'number' ? (reading[metric] as number) : null;
-    const status = classify(metric, value);
+    const range = limits[metric];
+    const status = classify(metric, value, range);
     const stateRef = db.doc(`users/${uid}/alertState/${deviceId}_${metric}`);
 
     if (status.level === 'unknown') {
@@ -107,8 +113,7 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
         return state;
       }
       if (step.kind === 'raise') {
-        const text = alertText(metric, status.label, value, deviceName, { simulated, uncalibrated: metric === 'ph' && !phCalibrated });
-        // Same fields and ID as the app's alert (services/alerts.ts), so either can create it.
+        const text = alertText(metric, status.label, value, deviceName, { simulated, uncalibrated: metric === 'ph' && !phCalibrated, range });
         tx.set(alertRef, {
           title: text.title.slice(0, 80),
           body: text.body.slice(0, 200),
@@ -116,6 +121,9 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
           metric,
           value,
           level: step.state.alertLevel,
+          // The limits it was checked against, so the app keeps showing this alert's status words
+          // and normal range as they were, even after the owner changes the limits.
+          limits: toStored(range),
           readingId,
           createdAt: FieldValue.serverTimestamp(),
           read: false,
@@ -131,11 +139,12 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
     });
 
     if (status.level === 'normal') continue;
-    // Did this reading raise an alert, here or in the app (if it was open)? Its ID is fixed, so look.
+    // Did this reading raise an alert? Its ID is fixed, so look - this also finds it when a retried
+    // run's transaction sees the state already updated by the first run.
     const alert = await alertRef.get();
     if (alert.exists) alerts.push({ metric, alertId: alertRef.id, title: String(alert.get('title')), body: String(alert.get('body')) });
     if (status.level === 'critical' && after?.alertLevel === 'critical' && after.alertedAtMs !== null && value !== null) {
-      critical.push({ metric, label: status.label, value, alertedAtMs: after.alertedAtMs });
+      critical.push({ metric, label: status.label, value, range, alertedAtMs: after.alertedAtMs });
     }
   }
 
@@ -235,7 +244,7 @@ async function sendSms(deps: Deps, ctx: Ctx & { phCalibrated: boolean }, critica
 
   // The newest readings by server time; this one is among them unless a newer one already arrived.
   const recent = await db.collection(`devices/${ctx.deviceId}/readings`).orderBy('serverTime', 'desc').limit(SMS_STREAK).get();
-  const streak = allowed.filter((c) => isCriticalStreak(c.metric, recent.docs.map((d) => d.get(c.metric))));
+  const streak = allowed.filter((c) => isCriticalStreak(c.metric, recent.docs.map((d) => d.get(c.metric)), c.range));
   if (streak.length === 0) return;
 
   // One SMS per alert episode (an episode = one critical alert, identified by when it was raised),

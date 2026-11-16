@@ -223,3 +223,43 @@ test('uncalibrated critical pH: alert, no SMS', async () => {
   assert.match(alerts[0].body, /not calibrated yet/);
   assert.equal((await deliveries('e2e-ph', 'sms')).length, 0);
 });
+
+test("the station's own alert limits: alert text, stored limits and SMS follow them; invalid limits fall back to the defaults", async () => {
+  // Normal 20-28 °C, critical above 30: 31 °C is only "a bit warm" with the defaults (never an SMS).
+  await addDevice('e2e-limits', false);
+  await db.doc('devices/e2e-limits').update({
+    limits: {
+      ph: { normalMin: 6.5, normalMax: 8.5, criticalBelow: 6, criticalAbove: 9 },
+      temperatureC: { normalMin: 20, normalMax: 28, criticalBelow: 15, criticalAbove: 30 },
+      nh3GasMv: { normalMin: 0, normalMax: 1700, criticalBelow: 0, criticalAbove: 2200 },
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+  });
+  await upload('e2e-limits', [{ temperatureC: 31 }, { temperatureC: 31 }, { temperatureC: 31.2 }]);
+  const sms = await until('SMS delivery', async () => {
+    const d = await deliveries('e2e-limits', 'sms');
+    return d.length && d.every((x) => x.status !== 'sending') ? d : undefined;
+  });
+  assert.equal(sms.length, 1, 'critical by the station limits: SMS after 3 readings');
+  assert.equal(sms[0].status, 'sent');
+  const alerts = await alertsFor('e2e-limits', 'temperatureC');
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].title, 'e2e-limits: water too hot');
+  assert.equal(alerts[0].level, 'critical');
+  assert.match(alerts[0].body, /Normal is 20 to 28 °C\./);
+  assert.deepEqual(alerts[0].limits, { normalMin: 20, normalMax: 28, criticalBelow: 15, criticalAbove: 30 }, 'stored with the alert');
+
+  // Reversed limits (written past the rules, e.g. by hand in the console) are ignored: the defaults apply.
+  await addDevice('e2e-badlimits', false);
+  await db.doc('devices/e2e-badlimits').update({
+    limits: { temperatureC: { normalMin: 30, normalMax: 20, criticalBelow: 35, criticalAbove: 15 }, updatedAt: FieldValue.serverTimestamp() },
+  });
+  await upload('e2e-badlimits', [{ temperatureC: 33 }]);
+  const bad = await until('in-app alert', async () => {
+    const a = await alertsFor('e2e-badlimits', 'temperatureC');
+    return a.length ? a : undefined;
+  });
+  assert.equal(bad[0].title, 'e2e-badlimits: water a bit warm');
+  assert.match(bad[0].body, /Normal is 20 to 32 °C\./);
+  assert.deepEqual(bad[0].limits, { normalMin: 20, normalMax: 32, criticalBelow: 15, criticalAbove: 35 });
+});

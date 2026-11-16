@@ -18,7 +18,8 @@ import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { formatAge, formatNumber } from '@/domain/format';
 import { STATION_NAME } from '@/domain/pairing';
 import { deviceStatus } from '@/domain/status';
-import { classify, normalRangeText, RANGES } from '@/domain/thresholds';
+import { limitsOf } from '@/domain/limits';
+import { classify, normalRangeText } from '@/domain/thresholds';
 import { useLatestReading } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
 import { useNotifications } from '@/hooks/use-profile';
@@ -46,9 +47,13 @@ export default function WaterScreen() {
   const sim: Tag[] = reading?.simulated ? [{ label: 'Simulated', tone: 'warning' }] : [];
   const loadError = devices.status === 'error' ? devices.message : device && latest.status === 'error' ? latest.message : null;
 
-  const ph = classify('ph', reading?.ph ?? null);
-  const temp = classify('temperatureC', reading?.temperatureC ?? null);
-  const nh3 = classify('nh3GasMv', reading?.nh3GasMv ?? null);
+  // The station's own alert limits, or the defaults (Settings > Alert limits).
+  const limits = limitsOf(device);
+  // The temperature scale reaches past the critical limit when it is set above 35 °C.
+  const tempMax = Math.max(40, Math.ceil((limits.temperatureC.warning[1] + 5) / 20) * 20);
+  const ph = classify('ph', reading?.ph ?? null, limits.ph);
+  const temp = classify('temperatureC', reading?.temperatureC ?? null, limits.temperatureC);
+  const nh3 = classify('nh3GasMv', reading?.nh3GasMv ?? null, limits.nh3GasMv);
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
@@ -92,14 +97,14 @@ export default function WaterScreen() {
           label="pH level"
           value={formatNumber(reading?.ph ?? null, 1)}
           status={ph}
-          note={`Normal ${normalRangeText('ph')}`}
+          note={`Normal ${normalRangeText('ph', limits.ph)}`}
           dimmed={dimmed}
           tags={[...(reading && !reading.phCalibrated ? [{ label: 'Uncalibrated', tone: 'warning' as const }] : []), ...sim]}>
           <ScaleBar
             value={reading?.ph ?? null}
             min={0}
             max={14}
-            segments={[{ until: RANGES.ph.normal[0], color: theme.scaleAcid }, { until: RANGES.ph.normal[1], color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
+            segments={[{ until: limits.ph.normal[0], color: theme.scaleAcid }, { until: limits.ph.normal[1], color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
             labels={['0 Acidic', '7 Neutral', 'Basic 14']}
           />
         </MetricCard>
@@ -110,15 +115,15 @@ export default function WaterScreen() {
           value={formatNumber(reading?.temperatureC ?? null, 1)}
           unit="°C"
           status={temp}
-          note={`Normal ${normalRangeText('temperatureC')}`}
+          note={`Normal ${normalRangeText('temperatureC', limits.temperatureC)}`}
           dimmed={dimmed}
           tags={sim}>
           <ScaleBar
             value={reading?.temperatureC ?? null}
             min={0}
-            max={40}
-            segments={[{ until: RANGES.temperatureC.normal[0], color: theme.scaleCool }, { until: RANGES.temperatureC.normal[1], color: theme.scaleNeutral }, { until: 40, color: theme.scaleWarm }]}
-            labels={['0 °C', '20 °C', '40 °C']}
+            max={tempMax}
+            segments={[{ until: limits.temperatureC.normal[0], color: theme.scaleCool }, { until: limits.temperatureC.normal[1], color: theme.scaleNeutral }, { until: tempMax, color: theme.scaleWarm }]}
+            labels={['0 °C', `${tempMax / 2} °C`, `${tempMax} °C`]}
           />
         </MetricCard>
 
@@ -128,7 +133,7 @@ export default function WaterScreen() {
           value={formatNumber(reading?.nh3GasMv ?? null, 0)}
           unit="mV"
           status={nh3}
-          note={`Air above the water · normal ${normalRangeText('nh3GasMv')}`}
+          note={`Air above the water · normal ${normalRangeText('nh3GasMv', limits.nh3GasMv)}`}
           dimmed={dimmed}
           tags={[{ label: 'Relative, not ppm', tone: 'info' }, ...sim]}
         />

@@ -56,3 +56,20 @@ test('SMS text: plain GSM characters, one text, all critical fields', () => {
 test('logs never show full phone numbers', () => {
   assert.equal(maskPhone('+639171234567'), '+63917*****67');
 });
+
+test("the station's own limits decide the streak and the SMS text", () => {
+  const warm = { normal: [20, 28] as [number, number], warning: [15, 30] as [number, number] };
+  // 31 °C is only "a bit warm" by default, but critical when the owner set critical above 30.
+  assert.equal(isCriticalStreak('temperatureC', [31, 31, 31]), false);
+  assert.equal(isCriticalStreak('temperatureC', [31, 31, 31], warm), true);
+  assert.equal(smsText('Tank 1', [{ metric: 'temperatureC', label: 'Too hot', value: 31, range: warm }], T),
+    'TubigTala: Tank 1 water TOO HOT 31.0 C (normal 20-28 C) at 3:42 PM');
+  // A normal range starting below zero is written with "to", not a double minus.
+  const cold = { normal: [-5, 10] as [number, number], warning: [-10, 15] as [number, number] };
+  assert.equal(smsText('Tank 1', [{ metric: 'temperatureC', label: 'Too hot', value: 16, range: cold }], T),
+    'TubigTala: Tank 1 water TOO HOT 16.0 C (normal -5 to 10 C) at 3:42 PM');
+  // Worst case length with custom decimals still fits one SMS.
+  const ph = { normal: [6.8, 8.2] as [number, number], warning: [6.5, 8.5] as [number, number] };
+  const long = smsText('x'.repeat(40), [{ metric: 'ph', label: 'Too high', value: 13.9, range: ph }, { metric: 'temperatureC', label: 'Too cold', value: -9.9, range: cold }], T);
+  assert.ok(long.length <= 160, `${long.length} chars`);
+});

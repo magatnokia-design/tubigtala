@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 
 import { calibrationMethod, DEFAULT_BUFFERS, type Buffers } from '@/domain/calibration';
+import { isDefaultLimits, LIMIT_METRICS, limitsFromDoc, toStored, type Limits } from '@/domain/limits';
 import type { PairingInfo } from '@/domain/pairing';
 import type { Device, Reading } from '@/domain/types';
 import { db } from '@/services/firebase';
@@ -16,12 +17,17 @@ const millisOrNull = (v: unknown): number | null => (v instanceof Timestamp ? v.
 
 function toDevice(s: QueryDocumentSnapshot<DocumentData>): Device {
   const d = s.data();
+  // Invalid or missing limits fall back to the defaults sensor by sensor - the same as the server.
+  const { limits, custom } = limitsFromDoc(d.limits);
   return {
     id: s.id,
     name: typeof d.name === 'string' ? d.name : s.id,
     simulated: d.simulated === true,
     readingIntervalSec: typeof d.readingIntervalSec === 'number' && d.readingIntervalSec > 0 ? d.readingIntervalSec : 60,
     pairedAtMs: millisOrNull(d.pairedAt),
+    limits,
+    customLimits: custom,
+    limitsUpdatedAtMs: millisOrNull(d.limits?.updatedAt),
     phCalibration: {
       status: d.phCalibration?.status === 'calibrated' ? 'calibrated' : 'uncalibrated',
       calibratedAtMs: millisOrNull(d.phCalibration?.calibratedAt),
@@ -129,6 +135,18 @@ export function saveCalibration(deviceId: string, ph7Mv: number, ph4Mv: number, 
 /** Back to the firmware's nominal constants (readings flagged uncalibrated). */
 export function resetCalibration(deviceId: string): Promise<void> {
   return updateDoc(doc(db, 'devices', deviceId), { phCalibration: { status: 'uncalibrated', calibratedAt: null, method: null } });
+}
+
+/**
+ * Saves the station's alert limits (Settings > Alert limits). The server uses them from the next
+ * reading. The defaults are saved as no limits at all, so a station back on the defaults also
+ * follows any later change to them. The rules re-check every value (firestore.rules validLimits).
+ */
+export function saveLimits(deviceId: string, limits: Limits): Promise<void> {
+  if (isDefaultLimits(limits)) return updateDoc(doc(db, 'devices', deviceId), { limits: deleteField() });
+  return updateDoc(doc(db, 'devices', deviceId), {
+    limits: { ...Object.fromEntries(LIMIT_METRICS.map((m) => [m, toStored(limits[m])])), updatedAt: serverTimestamp() },
+  });
 }
 
 /**
