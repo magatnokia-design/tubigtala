@@ -169,7 +169,8 @@ export function App() {
                   </div>
                   <h3>{s.name}</h3>
                   <p className="sensor-part">{s.part}</p>
-                  <p className="sensor-normal"><small>Normal</small>{s.normal}</p>
+                  {/* The defaults: each owner can set their own in the app (Alert limits). */}
+                  <p className="sensor-normal"><small>Normal by default</small>{s.normal}</p>
                   <Gauge s={s} />
                   <p className="sensor-note">{s.note}</p>
                 </article>
