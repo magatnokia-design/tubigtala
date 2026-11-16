@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include "config.h"
 #include "cloud.h"
+#include "sampling.h"
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
@@ -102,11 +103,27 @@ void putOrNull(JsonDocument& doc, const char* key, float v, int decimals) {
   else doc[key] = serialized(String(v, decimals));
 }
 
+// ---- Averaging over the reading interval (0.3.2, helpers in sampling.h) ----
+// pH and gas are sampled every SAMPLE_INTERVAL_MS and each reading uploads the average since the
+// previous one, so one noisy instant does not decide the minute (pH wobbled about +/-25 mV per
+// instant sample, too much for the app's "Stable" check of 5 mV).
+Avg phAvg, gasAvg;
+uint32_t lastSampleMs = 0;
+
+float readGasMv() { return millis() < NH3_WARMUP_MS ? NAN : readModuleMv(PIN_NH3, NH3_DIVIDER_RATIO); }
+
+void sampleSensors() {
+  if (millis() - lastSampleMs < SAMPLE_INTERVAL_MS) return;
+  lastSampleMs = millis();
+  addSample(phAvg, readPhMv());
+  addSample(gasAvg, readGasMv());
+}
+
 void takeReading() {
   float temperatureC = readTemperatureC();
-  float phMv = readPhMv();  // null while no pH board is detected
+  float phMv = takeAverage(phAvg, nothingSampled(phAvg) ? readPhMv() : NAN);  // null while no pH board is detected
   float ph = phFromMv(phMv);
-  float nh3GasMv = millis() < NH3_WARMUP_MS ? NAN : readModuleMv(PIN_NH3, NH3_DIVIDER_RATIO);
+  float nh3GasMv = takeAverage(gasAvg, nothingSampled(gasAvg) ? readGasMv() : NAN);
 
   StaticJsonDocument<384> doc;
   doc["bootId"] = bootId;
@@ -282,6 +299,7 @@ void maintainWifi() {
 }
 
 void loop() {
+  sampleSensors();
   if (firstReading || millis() - lastReadingMs >= READING_INTERVAL_MS) {
     firstReading = false;
     lastReadingMs = millis();

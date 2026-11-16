@@ -30,6 +30,8 @@ On tank-01 the pH 15 kΩ never worked: with the BNC shorted G34 read ~2,538 mV w
 - the zero (BNC shorted) is ~2.54 V and the probe in storage liquid ~2.42 V, so pH ~3.5-14 stays under the 3.1 V ADC clip;
 - the **10 kΩ in series** limits the current into G34's protection diode to ~0.15 mA if Po rises above 3.3 V (probe dry or unplugged, strong acid).
 
+Measured 16 Nov 2026 (cold buffers, ~17-20 °C): **6.86 -> ~2,607 mV, 4.01 -> ~3,075 mV** (~165 mV per pH, a healthy probe). 12 more counter-clockwise turns of the zero trimmer changed nothing (end of its range), so 4.01 sits near the top of the ESP32's range. Firmware 0.3.2 therefore treats readings up to 3,150 mV as valid (this ESP32 saturates at exactly 3,160) and uploads the average of 1-second samples per minute (spread in 6.86 went from 83 mV to 3 mV). Readable range is about pH 3.7 and up; accuracy is best near pH 6-8.
+
 Rules: keep the probe in liquid; pull Po before unscrewing the probe. `PH_DIVIDER_RATIO` is 1.0 in `config.h`; changing it changes `phMv`, so recalibrate afterwards. If G34 is unplugged, nothing pulls it to 0 V any more, so it may read noise instead of "not detected". The gas input (G35) still uses 10 kΩ / 15 kΩ.
 
 ## Voltage dividers (check before connecting)
