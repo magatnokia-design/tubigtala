@@ -2,7 +2,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { textbeeProviders, TEXTBEE_SEND_URL } from './providers.ts';
+import { fcmPush, textbeeProviders, TEXTBEE_SEND_URL, type MulticastSender } from './providers.ts';
+
+test('FCM push: alert channel and tag, accepted count, and dead tokens reported for cleanup', async () => {
+  let sent: Parameters<MulticastSender['sendEachForMulticast']>[0] | undefined;
+  const sender: MulticastSender = {
+    async sendEachForMulticast(m) {
+      sent = m;
+      return {
+        successCount: 1,
+        responses: [
+          { success: true },
+          { success: false, error: { code: 'messaging/registration-token-not-registered' } },
+          { success: false, error: { code: 'messaging/internal-error' } },
+        ],
+      };
+    },
+  };
+  const r = await fcmPush(sender)(['tok-a', 'tok-b', 'tok-c'], { title: 'TubigTala Station: water too hot', body: 'Water is 41 °C.', tag: 'tank-01_temperatureC_x-1' });
+  assert.deepEqual(sent?.tokens, ['tok-a', 'tok-b', 'tok-c']);
+  assert.deepEqual(sent?.notification, { title: 'TubigTala Station: water too hot', body: 'Water is 41 °C.' });
+  assert.deepEqual(sent?.android, { priority: 'high', notification: { channelId: 'alerts', tag: 'tank-01_temperatureC_x-1' } });
+  assert.equal(r.ok, true);
+  assert.equal(r.detail, 'FCM accepted 1/3; messaging/registration-token-not-registered');
+  assert.deepEqual(r.invalidTokens, ['tok-b'], 'only a dead token is removed, not a temporary error');
+});
+
+test('FCM push: nothing accepted is a failure', async () => {
+  const sender: MulticastSender = { sendEachForMulticast: async () => ({ successCount: 0, responses: [{ success: false, error: { code: 'messaging/third-party-auth-error' } }] }) };
+  const r = await fcmPush(sender)(['tok-a'], { title: 't', body: 'b', tag: 'x' });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.invalidTokens, []);
+});
 
 type Call = { url: string; init: { method: string; headers: Record<string, string>; body: string } };
 

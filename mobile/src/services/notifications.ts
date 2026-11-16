@@ -1,12 +1,13 @@
 // Alerts (users/{uid}/notifications) and phone notifications.
 // Alerts are raised by services/alerts.ts (in a transaction with the shared alert state).
 import {
-  collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query,
+  collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc,
   Timestamp, updateDoc, where, writeBatch, type FirestoreError, type Unsubscribe,
 } from 'firebase/firestore';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
+import { pushTokenId } from '@/domain/push';
 import type { AppNotification } from '@/domain/types';
 import { db } from '@/services/firebase';
 import { emptyBecauseOffline } from '@/services/offline';
@@ -114,12 +115,50 @@ export async function notificationPermissionGranted(): Promise<boolean> {
   return (await Notifications.getPermissionsAsync()).granted;
 }
 
-/** Shows a notification on this phone now (no server involved). */
-export async function showPhoneNotification(title: string, body: string): Promise<void> {
-  if (!phoneNotificationsSupported) return;
-  const Notifications = await notificationsModule();
-  await Notifications.scheduleNotificationAsync({
-    content: { title, body, ...(Platform.OS === 'android' ? { channelId: 'alerts' } : {}) },
-    trigger: null,
+// ---- Push from the backend (Firebase Cloud Messaging, since 0.9.2) ----
+// The backend sends every alert to the phones registered here, so alerts arrive while the app
+// is closed (functions/src/readings.ts). The app no longer shows its own pop-ups for alerts:
+// with both, an open app would show each alert twice.
+
+/** This phone's FCM registration token; null in Expo Go, off Android, without Firebase config, or on error. */
+export async function devicePushToken(): Promise<string | null> {
+  if (!phoneNotificationsSupported || Platform.OS !== 'android') return null;
+  try {
+    const Notifications = await notificationsModule();
+    const t = await Notifications.getDevicePushTokenAsync();
+    return typeof t.data === 'string' && t.data.length >= 20 ? t.data : null;
+  } catch {
+    return null;
+  }
+}
+
+const tokenDoc = (uid: string, token: string) => doc(db, 'users', uid, 'pushTokens', pushTokenId(token));
+
+/** Registers this phone with the backend. False when this phone has no push address. */
+export async function registerPushToken(uid: string, token?: string | null): Promise<boolean> {
+  const t = token ?? (await devicePushToken());
+  if (!t) return false;
+  await setDoc(tokenDoc(uid, t), {
+    token: t,
+    platform: 'android',
+    appVersion: (Constants.expoConfig?.version ?? '').slice(0, 20),
+    updatedAt: serverTimestamp(),
   });
+  return true;
+}
+
+/** Stops alert notifications to this phone (sign-out, notifications switched off). */
+export async function unregisterPushToken(uid: string): Promise<void> {
+  const t = await devicePushToken();
+  if (t) await deleteDoc(tokenDoc(uid, t));
+}
+
+/** FCM can replace a phone's token at any time; calls back with the new one. */
+export async function onPushTokenChanged(cb: (token: string) => void): Promise<() => void> {
+  if (!phoneNotificationsSupported || Platform.OS !== 'android') return () => undefined;
+  const Notifications = await notificationsModule();
+  const sub = Notifications.addPushTokenListener((t) => {
+    if (typeof t.data === 'string') cb(t.data);
+  });
+  return () => sub.remove();
 }

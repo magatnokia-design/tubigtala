@@ -10,6 +10,7 @@ Status: **draft, 24 Oct 2026.** No real hardware has produced a reading yet; eve
 users/{uid}                                  one app account's profile and alert preferences
 users/{uid}/notifications/{notificationId}   alerts for that account
 users/{uid}/alertState/{deviceId}_{metric}   last status per device and field (alert de-duplication)
+users/{uid}/pushTokens/{id}   one per phone with phone notifications on: { token, platform, appVersion, updatedAt } (since 16 Nov 2026)
 devices/{deviceId}                           one monitoring unit (ESP32 + probes)
 devices/{deviceId}/readings/{readingId}      one sample from that unit
 ```
@@ -17,12 +18,12 @@ devices/{deviceId}/readings/{readingId}      one sample from that unit
 Server-only (written by Cloud Functions with firebase-admin; no app account can read or write them, tested in `devtools/rules.test.mjs`):
 
 ```
-alertDeliveries/{id}   one SMS: sms_{uid}_{deviceId}_{metric}_{alertedAtMs} (email_… records may exist from before 13 Nov 2026)
+alertDeliveries/{id}   one SMS: sms_{uid}_{deviceId}_{metric}_{alertedAtMs}; one push: push_{uid}_{alertId} (email_… records may exist from before 13 Nov 2026)
 smsBudget/global       SMS counted per Philippine day and month, for the caps
 devicePairing/{deviceId}  { code }: the station's secret pairing code, set by an admin (devtools pair-code); only the rules read it
 ```
 
-`alertDeliveries` fields: `channel` (`sms`; `email` only in records from before 13 Nov 2026), `uid`, `deviceId`, `readingId`, `metric`, `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
+`alertDeliveries` fields: `channel` (`sms` or `push`; `email` only in records from before 13 Nov 2026), `uid`, `deviceId`, `readingId`, `metric`, `status` (`sending` → `sent`/`failed`, or `skipped: day|month cap reached` / `skipped: no phone registered`), `detail` (provider outcome, no secrets or recipients), `createdAt`, `updatedAt`. The record is created **before** sending; a second run for the same reading or episode finds it and sends nothing. `smsBudget/global`: `{ day: "2026-11-04", dayCount, month: "2026-11", monthCount }`.
 
 ### `users/{uid}`
 
@@ -56,6 +57,19 @@ Shared by all of the user's phones, so one ongoing condition raises one alert ev
 | `alertedAt` | timestamp | null | When that alert was raised (cooldown). |
 | `updatedAt` | timestamp | Server time of the write. |
 
+### `users/{uid}/pushTokens/{id}` (since 16 Nov 2026, app 0.9.2)
+
+Where the backend sends phone notifications: one document per phone while Settings > Phone notifications is on. The app registers on start and when Firebase replaces the token; it deletes the document when notifications are switched off and on sign-out. The backend deletes tokens Firebase Cloud Messaging reports as gone. Only the owner can read or write them (tested in `devtools/rules.test.mjs`).
+
+| Field | Type | Meaning |
+|---|---|---|
+| `token` | string, 20–4096 chars | The phone's Firebase Cloud Messaging registration token. |
+| `platform` | `android` | Only Android is built. |
+| `appVersion` | string | App version that registered it (troubleshooting). |
+| `updatedAt` | timestamp | Server time of the write. |
+
+The document ID is a short hash of the token (`mobile/src/domain/push.ts`), so the same phone always maps to the same document.
+
 Owner only. Each phone touches this record only when a field's status changes, not on every reading, to keep Firestore reads low. Verified on the emulator (28 Oct 2026): two phones racing on the same reading produce one alert; the loser gets `permission-denied` and does nothing on its next try.
 
 ### Alert ranges
@@ -72,7 +86,7 @@ pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no saf
 
 ### Alert policy: phone notifications and SMS
 
-Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/`, tested on the emulator; Blaze enabled 16 Nov 2026.** Deployed, SMS goes out through TextBee (secrets `TEXTBEE_API_KEY` / `TEXTBEE_DEVICE_ID`); in the emulator it is only logged. Not built yet: push from the server (the app does not store push tokens yet), the offline / sensor-not-reading checks, and the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/`, tested on the emulator; Blaze enabled 16 Nov 2026.** Deployed, SMS goes out through TextBee (secrets `TEXTBEE_API_KEY` / `TEXTBEE_DEVICE_ID`) - first real SMS delivered 16 Nov 2026 15:33 - and phone notifications go out through **Firebase Cloud Messaging** straight from the function (decided 16 Nov 2026 instead of the Expo push service: no extra account or key) to the phones in `users/{uid}/pushTokens`, one push per alert, so they arrive while the app is closed; the app no longer shows its own pop-up for alerts (it would show each twice). In the emulator both are only logged. Not built yet: the offline / sensor-not-reading checks, and the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
 
 | Event | Push | SMS |
 |---|---|---|

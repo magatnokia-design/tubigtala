@@ -3,10 +3,12 @@ import { Stack } from 'expo-router';
 import { AlertWatchers } from '@/components/alert-watcher';
 import { Colors } from '@/constants/theme';
 import { useNotificationPrompt } from '@/hooks/use-notification-prompt';
+import { usePushRegistration } from '@/hooks/use-push-registration';
 import { SelectedDeviceProvider } from '@/hooks/use-selected-device';
 
 export default function AppLayout() {
   useNotificationPrompt();
+  usePushRegistration();
   return (
     <SelectedDeviceProvider>
       <AlertWatchers />

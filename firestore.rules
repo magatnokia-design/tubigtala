@@ -60,6 +60,27 @@ service cloud.firestore {
           && validAlertState(request.resource.data);
       }
 
+      // Push addresses (Firebase Cloud Messaging registration tokens) of the owner's phones. The
+      // app writes one per phone while phone notifications are on and deletes it on sign-out or
+      // switch-off; the backend (firebase-admin, not bound by these rules) reads them to send alert
+      // notifications and deletes the ones FCM reports as no longer valid. The document ID is a
+      // short hash of the token (domain/push.ts), not the token itself.
+      match /pushTokens/{tokenId} {
+        function validPushToken(t) {
+          return t.keys().hasOnly(['token', 'platform', 'appVersion', 'updatedAt'])
+            && t.keys().hasAll(['token', 'platform', 'appVersion', 'updatedAt'])
+            && t.token is string && t.token.size() >= 20 && t.token.size() <= 4096
+            && t.platform == 'android'
+            && t.appVersion is string && t.appVersion.size() <= 20
+            && t.updatedAt == request.time;
+        }
+
+        allow read, delete: if isOwner();
+        allow create, update: if isOwner()
+          && tokenId.matches('^[a-z0-9]{1,32}$')
+          && validPushToken(request.resource.data);
+      }
+
       // Alerts. Until Cloud Functions exist the app raises them itself while open, so the owner
       // may create one - only for their own device, in the fixed shape, unread, and with an ID
       // derived from the reading so two phones open at once cannot create duplicates.

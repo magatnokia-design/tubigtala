@@ -51,8 +51,12 @@ const alertsFor = async (deviceId: string, metric: string) =>
 before(async () => {
   uid = (await getAuth().createUser({ email: 'owner@tubigtala.test', password: 'e2e-pass-123' })).uid;
   await db.doc(`users/${uid}`).set({
-    displayName: 'E2E Owner', phoneE164: '+639000000001', smsAlertsEnabled: true, pushEnabled: false,
+    displayName: 'E2E Owner', phoneE164: '+639000000001', smsAlertsEnabled: true, pushEnabled: true,
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+  // One registered phone (the emulator logs the push; nothing is sent).
+  await db.doc(`users/${uid}/pushTokens/e2ephone1`).set({
+    token: 'e2e-fake-fcm-token-0123456789', platform: 'android', appVersion: 'e2e', updatedAt: FieldValue.serverTimestamp(),
   });
 });
 
@@ -76,8 +80,22 @@ test('critical temperature: one alert, one SMS after 3 readings, none repeated, 
   assert.equal(alerts.length, 1, 'one alert for one ongoing condition');
   assert.equal(alerts[0].title, 'e2e-real: water too hot');
   assert.equal((await deliveries('e2e-real', 'email')).length, 0, 'email alerts were dropped (13 Nov 2026)');
+  const push = await deliveries('e2e-real', 'push');
+  assert.equal(push.length, 1, 'one phone push, for the reading that raised the alert');
+  assert.equal(push[0].status, 'sent');
+  assert.equal(push[0].metric, 'temperatureC');
   const budget = (await db.doc('smsBudget/global').get()).data();
   assert.equal(budget?.dayCount, 1);
+});
+
+test('phone notifications switched off: alert, but no push', async () => {
+  await db.doc(`users/${uid}`).update({ pushEnabled: false });
+  await addDevice('e2e-nopush', false);
+  await upload('e2e-nopush', [{ temperatureC: 34 }]); // a bit warm: warning, never an SMS
+  await until('in-app alert', async () => ((await alertsFor('e2e-nopush', 'temperatureC')).length ? true : undefined));
+  await sleep(2000);
+  assert.equal((await deliveries('e2e-nopush', 'push')).length, 0);
+  await db.doc(`users/${uid}`).update({ pushEnabled: true });
 });
 
 test('simulated device: alert, never an SMS', async () => {
@@ -88,6 +106,7 @@ test('simulated device: alert, never an SMS', async () => {
   assert.equal((await alertsFor('e2e-sim', 'temperatureC')).length, 1);
   assert.match((await alertsFor('e2e-sim', 'temperatureC'))[0].body, /Test data, not a real sensor\./);
   assert.equal((await deliveries('e2e-sim', 'sms')).length, 0);
+  assert.equal((await deliveries('e2e-sim', 'push')).length, 1, 'test data still pushes (marked in the text)');
 });
 
 test('uncalibrated critical pH: alert, no SMS', async () => {

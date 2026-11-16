@@ -247,6 +247,36 @@ test('owner can read, mark read and delete own notifications; others cannot', as
   await assertSucceeds(deleteDoc(doc(as('juan'), 'users/juan/notifications/n1')));
 });
 
+// --- users/{uid}/pushTokens ---
+const tokenDoc = (uid, id = 'abc123') => `users/${uid}/pushTokens/${id}`;
+const pushToken = (o = {}) => ({ token: 'fcm-token-'.padEnd(40, 'x'), platform: 'android', appVersion: '0.9.2', updatedAt: serverTimestamp(), ...o });
+
+test('owner can register, refresh, read and delete own push token', async () => {
+  await assertSucceeds(setDoc(doc(as('owner'), tokenDoc('owner')), pushToken()));
+  await assertSucceeds(setDoc(doc(as('owner'), tokenDoc('owner')), pushToken({ appVersion: '0.9.3' })));
+  await assertSucceeds(getDoc(doc(as('owner'), tokenDoc('owner'))));
+  await assertSucceeds(deleteDoc(doc(as('owner'), tokenDoc('owner'))));
+});
+
+test("nobody can read, write or delete another user's push tokens", async () => {
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), tokenDoc('owner')), { ...pushToken(), updatedAt: Timestamp.now() }));
+  await assertFails(getDoc(doc(as('stranger'), tokenDoc('owner'))));
+  await assertFails(setDoc(doc(as('stranger'), tokenDoc('owner', 'evil1')), pushToken()));
+  await assertFails(deleteDoc(doc(as('stranger'), tokenDoc('owner'))));
+  await assertFails(getDoc(doc(as(null), tokenDoc('owner'))));
+});
+
+test('push tokens must have the fixed shape', async () => {
+  await assertFails(setDoc(doc(as('owner'), tokenDoc('owner')), pushToken({ platform: 'ios' })));
+  await assertFails(setDoc(doc(as('owner'), tokenDoc('owner')), pushToken({ token: 'short' })));
+  await assertFails(setDoc(doc(as('owner'), tokenDoc('owner')), pushToken({ updatedAt: Timestamp.fromMillis(0) })));
+  await assertFails(setDoc(doc(as('owner'), tokenDoc('owner')), pushToken({ extra: true })));
+  await assertFails(setDoc(doc(as('owner'), tokenDoc('owner', 'Bad-ID')), pushToken()));
+  const { appVersion, ...noVersion } = pushToken();
+  void appVersion;
+  await assertFails(setDoc(doc(as('owner'), tokenDoc('owner')), noVersion));
+});
+
 // --- users/{uid}/alertState ---
 const stateDoc = (uid, key = `${DEVICE}_ph`) => `users/${uid}/alertState/${key}`;
 const alertState = (o = {}) => ({ level: 'critical', alertLevel: 'critical', alertedAt: serverTimestamp(), updatedAt: serverTimestamp(), ...o });
