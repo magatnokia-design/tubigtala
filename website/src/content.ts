@@ -6,7 +6,7 @@
  * TubigTala.apk, so this always gets the newest. The page links only to the file itself.
  */
 export const APK_URL = 'https://github.com/magatnokia-design/tubigtala/releases/latest/download/TubigTala.apk';
-export const APP_VERSION = '0.9.1';
+export const APP_VERSION = '0.9.2';
 
 export const steps = [
   { icon: 'sensors', title: 'The station measures', text: 'An ESP32 station at your tank reads the water temperature, the pH, and the ammonia gas in the air above the water - every minute.' },
@@ -16,8 +16,9 @@ export const steps = [
 
 export const features = [
   { icon: 'water_drop', title: 'Live readings', text: 'Temperature, pH and ammonia gas, refreshed every minute, coloured green, amber or red.' },
-  // SMS needs the server backend (Blaze), not live yet - say so until it is (CLAUDE.md: no unbuilt claims).
-  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range. SMS alerts for critical pH or temperature are coming soon.' },
+  // SMS rule as in functions/src/policy.ts: temperature, or pH once calibrated, critical for
+  // SMS_STREAK (3) readings in a row. Live since 16 Nov 2026 (first SMS delivered that day).
+  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, and an SMS when the temperature or the calibrated pH stays critical for three readings in a row.' },
   { icon: 'monitoring', title: 'Charts and insights', text: 'The last hour live, or any day or week since data started, with highs, lows and trends.' },
   { icon: 'download', title: 'Excel export', text: 'Pick today, one day or a date range and save the readings as a spreadsheet.' },
   { icon: 'qr_code_scanner', title: 'Scan to pair', text: 'Add your station by scanning the QR sticker on it. No setup codes to type.' },
