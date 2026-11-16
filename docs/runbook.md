@@ -88,14 +88,28 @@ cd functions; npm run test:e2e       # builds, starts auth+firestore+functions e
 
 `functions\` holds the backend that raises alerts and sends SMS for every uploaded reading (`onReadingCreated`, region `asia-southeast1`; policy in `docs/data-model.md`, "Alert policy"). It compiles the app's `mobile\src\domain\{thresholds,alerts,format}.ts` into its own build, so the app and the server classify and word alerts with the same code.
 
-Status (13 Nov 2026): runs on the emulator only. Deploying needs the Blaze plan. SMS goes to a **log provider** that prints what would be sent (recipient masked) and sends nothing; the real TextBee sender, server push, and offline checks are not built yet. Email alerts were dropped on 13 Nov 2026 (phone notifications + SMS only).
+Status (16 Nov 2026): the project is on **Blaze** (billing account "Nokia Billing Account", budget USD 2 - an email alert, not a spending stop). Deployed functions send SMS through **TextBee** (`functions/src/providers.ts`); the **emulator always logs** SMS and never sends, whatever secrets exist. Server push and offline checks are not built yet. Email alerts were dropped on 13 Nov 2026 (phone notifications + SMS only).
 
-**Deploy caution.** Now that `firebase.json` has a `functions` section, a plain `firebase deploy` also tries to deploy functions (and fails on Spark). Deploy rules on their own:
+**Secrets** (Secret Manager in tubigtala-64d9e, readable only by the function; set 16 Nov 2026, version 1). To change one, run the command and paste the new value when asked; the next deploy or cold start picks it up:
 
 ```powershell
-firebase use                                # must print tubigtala-64d9e
-firebase deploy --only firestore:rules
+firebase functions:secrets:set TEXTBEE_API_KEY      # TextBee dashboard > API keys
+firebase functions:secrets:set TEXTBEE_DEVICE_ID    # TextBee dashboard > the gateway phone's device ID
+firebase functions:secrets:get TEXTBEE_API_KEY      # versions only, never the value
 ```
+
+`functions/.secret.local` holds placeholders for the emulator (git-ignored, not deployed).
+
+**Deploy** (the user runs it; Claude is not allowed to deploy). From an up-to-date `main`:
+
+```powershell
+firebase login:list                         # must be magatnokia@gmail.com
+firebase use                                # must print tubigtala-64d9e - never wattwise-fe394
+firebase deploy --only functions            # say No if it offers to delete functions you never wrote
+firebase deploy --only firestore:rules      # only when firestore.rules changed
+```
+
+A plain `firebase deploy` deploys rules, indexes and functions together.
 
 ## Firmware (compile only, no board needed)
 

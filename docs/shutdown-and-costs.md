@@ -17,7 +17,7 @@ Rough Firestore usage: one board at one reading a minute writes ~1,440 readings 
 
 | When | Service | Cost model | Before enabling |
 |---|---|---|---|
-| Server-side alerts (app closed) | Firebase **Blaze** + Cloud Functions | Pay as you go above a free monthly allowance | Set a **budget alert**: Google Cloud console > Billing > Budgets & alerts, scoped to `tubigtala-64d9e`. A budget alert only emails; it does not stop charges. |
+| Server-side alerts (app closed) | Firebase **Blaze** + Cloud Functions + Secret Manager | Pay as you go above a free monthly allowance | **On since 16 Nov 2026**: billing account "Nokia Billing Account", budget **USD 2** (set in the upgrade dialog). A budget alert only emails; it does not stop charges. Expected cost about USD 0: one function run per reading (~43,000 a month, free allowance is millions); `maxInstances: 2`. To stop all server costs: delete the function (`firebase functions:delete onReadingCreated`), then downgrade the project to Spark in the Firebase console. |
 | SMS alerts | TextBee + the gateway phone's SIM | SIM load per SMS | Test with mocked sends first (CLAUDE.md). The TextBee account/phone is shared with another project (Smilebook): one monthly limit for both. |
 
 No email alerts (dropped 13 Nov 2026), so there is no Brevo account or sender domain to pay for.

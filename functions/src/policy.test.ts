@@ -31,12 +31,12 @@ test('streak needs 3 critical readings in a row; missing or milder values break 
   assert.equal(isCriticalStreak('ph', [9.2, 9.5, 5.5]), true); // too high or too low, both critical
 });
 
-test('caps: 5 a day, 250 a month, counters restart with the Philippine day/month', () => {
+test('caps: 5 a day, 100 a month, counters restart with the Philippine day/month', () => {
   const first = reserveSms(null, T, 1);
   assert.deepEqual(first, { ok: true, next: { day: '2026-11-04', dayCount: 1, month: '2026-11', monthCount: 1 } });
   assert.deepEqual(reserveSms({ day: '2026-11-04', dayCount: SMS_DAY_CAP, month: '2026-11', monthCount: 20 }, T, 1), { ok: false, reason: 'day' });
   assert.deepEqual(reserveSms({ day: '2026-11-04', dayCount: 1, month: '2026-11', monthCount: SMS_MONTH_CAP }, T, 1), { ok: false, reason: 'month' });
-  // yesterday's 5 do not count today; last month's 250 do not count this month
+  // yesterday's 5 do not count today; last month's 100 do not count this month
   assert.equal(reserveSms({ day: '2026-11-03', dayCount: SMS_DAY_CAP, month: '2026-11', monthCount: 10 }, T, 1).ok, true);
   assert.equal(reserveSms({ day: '2026-10-31', dayCount: 5, month: '2026-10', monthCount: SMS_MONTH_CAP }, T, 1).ok, true);
 });

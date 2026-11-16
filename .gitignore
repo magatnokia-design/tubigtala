@@ -66,3 +66,6 @@ functions/lib/
 
 # Pairing codes and QR stickers made by devtools/pair-code.mjs (secret until printed)
 devtools/out/
+
+# Functions emulator secret overrides (placeholders; real secrets live in Secret Manager)
+.secret.local

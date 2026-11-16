@@ -6,9 +6,13 @@ import { classify, METRIC_INFO, RANGES, type Metric } from '../../mobile/src/dom
 
 /** SMS needs this many critical readings in a row, so one bad reading does not cost a text. */
 export const SMS_STREAK = 3;
-/** TextBee plan: 300 SMS/month for the whole account. 50 are kept for testing. */
+/**
+ * TextBee free plan: 50/day, 300/month for the whole account, received messages included, and
+ * the account and phone are shared with another project (Smilebook, usage unknown). So TubigTala
+ * keeps to 5/day and 100/month (decided 16 Nov 2026).
+ */
 export const SMS_DAY_CAP = 5;
-export const SMS_MONTH_CAP = 250;
+export const SMS_MONTH_CAP = 100;
 
 const MANILA_OFFSET_MS = 8 * 3_600_000; // UTC+8, no daylight saving
 
