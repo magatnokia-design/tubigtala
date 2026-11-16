@@ -21,8 +21,10 @@ Analog inputs use **ADC1 only** (GPIO 32–39). ADC2 pins stop working while Wi-
 | pH module | V+ / G | 5 V / GND | Most pH boards need 5 V. Check yours. |
 | MQ-137 module | AO (analog out) | GPIO 35 (ADC1_CH7) | Through a voltage divider. Input-only pin. |
 | MQ-137 module | VCC / GND | 5 V / GND | The heater draws ~150 mA. Check the USB supply can handle it. |
+| BOOT button (on the ESP32 board) | - | GPIO 0 | Nothing to wire. Held 3 s after start-up: opens the Wi-Fi setup network (firmware 0.4.0+, `docs/device-setup.md` step 6). Keep the enclosure so it can still be pressed. |
+| Blue LED (on the ESP32 board) | - | GPIO 2 | Nothing to wire. Blinks while the Wi-Fi setup network is open. |
 
-All grounds must be shared (ESP32, pH board, MQ-137 board).
+All grounds must be shared (ESP32, pH board, MQ-137 board). Keep GPIO 0 and GPIO 2 free: both are also boot-mode pins.
 
 ## pH input without a divider (16 Nov 2026)
 
