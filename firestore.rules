@@ -195,7 +195,8 @@ service cloud.firestore {
             && isNullOrNumberIn(r.ph, 0, 14)
             && r.phCalibrated is bool
             && isNullOrNumberIn(r.phMv, 0, 5500)
-            && isNullOrNumberIn(r.temperatureC, -10, 60)
+            // up to the DS18B20's 125 °C (firmware 0.3.3 TEMP_MAX_C; was 60, which hid hot water)
+            && isNullOrNumberIn(r.temperatureC, -10, 125)
             && isNullOrNumberIn(r.nh3GasMv, 0, 5500)
             && r.simulated is bool
             && r.firmware is string && r.firmware.size() >= 1 && r.firmware.size() <= 32;

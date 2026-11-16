@@ -5,7 +5,10 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
+
+import { logProviders } from './providers.ts';
+import { checkStationsOnce } from './stations.ts';
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error('Run through "npm run test:e2e" so it only ever touches the emulators');
 initializeApp({ projectId: 'demo-tubigtala' });
@@ -31,12 +34,18 @@ async function addDevice(id: string, simulated: boolean) {
 }
 
 let seq = 0;
-/** Writes readings one by one, like a board at a fast interval, so serverTime order = write order. */
-async function upload(deviceId: string, values: { ph?: number | null; temperatureC?: number | null; phCalibrated?: boolean }[], simulated = false) {
+type Values = { ph?: number | null; temperatureC?: number | null; nh3GasMv?: number | null; phCalibrated?: boolean; at?: number };
+/** Default unless given - null included (a field without a value), unlike `??`. */
+const given = <T>(v: T | undefined, fallback: T): T => (v === undefined ? fallback : v);
+/**
+ * Writes readings one by one, like a board at a fast interval, so serverTime order = write order.
+ * `at` back-dates serverTime (the Admin SDK may set it), to test what takes minutes in seconds.
+ */
+async function upload(deviceId: string, values: Values[], simulated = false) {
   for (const v of values) {
     await db.doc(`devices/${deviceId}/readings/e2e-${seq++}`).create({
-      bootId: 'e2e', seq, serverTime: FieldValue.serverTimestamp(), deviceTime: null,
-      ph: v.ph ?? 7.0, phCalibrated: v.phCalibrated ?? true, phMv: 2500, temperatureC: v.temperatureC ?? 27, nh3GasMv: 1400,
+      bootId: 'e2e', seq, serverTime: v.at === undefined ? FieldValue.serverTimestamp() : Timestamp.fromMillis(v.at), deviceTime: null,
+      ph: given(v.ph, 7.0), phCalibrated: v.phCalibrated ?? true, phMv: 2500, temperatureC: given(v.temperatureC, 27), nh3GasMv: given(v.nh3GasMv, 1400),
       simulated, firmware: 'e2e',
     });
     await sleep(1500);
@@ -47,6 +56,8 @@ const deliveries = async (deviceId: string, channel: string) =>
   (await db.collection('alertDeliveries').where('deviceId', '==', deviceId).where('channel', '==', channel).get()).docs.map((d) => d.data());
 const alertsFor = async (deviceId: string, metric: string) =>
   (await db.collection(`users/${uid}/notifications`).where('deviceId', '==', deviceId).where('metric', '==', metric).get()).docs.map((d) => d.data());
+const alertsOfKind = async (deviceId: string, kind: string) =>
+  (await db.collection(`users/${uid}/notifications`).where('deviceId', '==', deviceId).where('kind', '==', kind).get()).docs.map((d) => d.data());
 
 before(async () => {
   uid = (await getAuth().createUser({ email: 'owner@tubigtala.test', password: 'e2e-pass-123' })).uid;
@@ -107,6 +118,76 @@ test('simulated device: alert, never an SMS', async () => {
   assert.match((await alertsFor('e2e-sim', 'temperatureC'))[0].body, /Test data, not a real sensor\./);
   assert.equal((await deliveries('e2e-sim', 'sms')).length, 0);
   assert.equal((await deliveries('e2e-sim', 'push')).length, 1, 'test data still pushes (marked in the text)');
+});
+
+test('SMS alerts switched off: critical alert and push, but no SMS', async () => {
+  await db.doc(`users/${uid}`).update({ smsAlertsEnabled: false });
+  await addDevice('e2e-nosms', false);
+  await upload('e2e-nosms', [{ temperatureC: 40 }, { temperatureC: 40 }, { temperatureC: 40 }]);
+  await until('in-app alert', async () => ((await alertsFor('e2e-nosms', 'temperatureC')).length ? true : undefined));
+  await sleep(3000);
+  assert.equal((await deliveries('e2e-nosms', 'sms')).length, 0, 'the SMS switch is respected');
+  assert.equal((await deliveries('e2e-nosms', 'push')).length, 1, 'phone notifications are separate');
+  await db.doc(`users/${uid}`).update({ smsAlertsEnabled: true });
+});
+
+test('sensor not reading: one alert after 10 minutes without values; the gas warm-up never alerts', async () => {
+  await addDevice('e2e-missing', false);
+  const t0 = Date.now() - 12 * 60_000;
+  // 11 readings a minute apart: temperature missing throughout (10 minutes at the 11th);
+  // gas missing only for the first 3, like the warm-up after a restart.
+  await upload('e2e-missing', Array.from({ length: 11 }, (_, i) => ({ temperatureC: null, nh3GasMv: i < 3 ? null : 1400, at: t0 + i * 60_000 })));
+  const sensor = await until('sensor alert', async () => {
+    const a = await alertsOfKind('e2e-missing', 'sensor');
+    return a.length ? a : undefined;
+  });
+  await sleep(2000);
+  assert.equal(sensor.length, 1, 'one alert for the whole episode');
+  assert.equal(sensor[0].sensor, 'temperatureC', 'not the gas sensor: its warm-up was short');
+  assert.equal(sensor[0].title, 'e2e-missing: temperature sensor not reading');
+  assert.equal(sensor[0].metric, null, 'every app version shows the title and text as written');
+  assert.equal((await deliveries('e2e-missing', 'push')).length, 1);
+  assert.equal((await deliveries('e2e-missing', 'sms')).length, 0, 'push only');
+
+  // A value again ends the episode: the record is cleared, so a later gap starts a new one.
+  await upload('e2e-missing', [{ temperatureC: 27, at: t0 + 11 * 60_000 }]);
+  await until('missing record cleared', async () => {
+    const s = (await db.doc(`users/${uid}/alertState/e2e-missing_temperatureC`).get()).data();
+    return s && s.missingSince === undefined && s.missingAlertedAt === undefined ? true : undefined;
+  });
+  const gas = (await db.doc(`users/${uid}/alertState/e2e-missing_nh3GasMv`).get()).data();
+  assert.equal(gas?.missingSince, undefined, 'warm-up record cleared once gas values came');
+});
+
+test('station offline after 15 minutes without readings, then back online - one alert each', async () => {
+  await addDevice('e2e-offline', false);
+  const now = Date.now();
+  await upload('e2e-offline', [{ at: now - 20 * 60_000 }]);
+  await sleep(1000);
+
+  await checkStationsOnce({ db, providers: logProviders, nowMs: () => now });
+  const off = await alertsOfKind('e2e-offline', 'offline');
+  assert.equal(off.length, 1);
+  assert.equal(off[0].title, 'e2e-offline: offline');
+  assert.match(off[0].body, /^No readings since .+\. Check its power and Wi-Fi\.$/);
+
+  await checkStationsOnce({ db, providers: logProviders, nowMs: () => now + 5 * 60_000 });
+  assert.equal((await alertsOfKind('e2e-offline', 'offline')).length, 1, 'no repeat while it stays offline');
+
+  await upload('e2e-offline', [{ at: now }]);
+  await sleep(1000);
+  await checkStationsOnce({ db, providers: logProviders, nowMs: () => now + 60_000 });
+  const on = await alertsOfKind('e2e-offline', 'online');
+  assert.equal(on.length, 1);
+  assert.equal(on[0].title, 'e2e-offline: back online');
+  assert.match(on[0].body, /^Readings resumed at .+\. The last one before that was at .+\.$/);
+  const push = await deliveries('e2e-offline', 'push');
+  assert.equal(push.length, 2, 'offline and back online each pushed once');
+  assert.ok(push.every((p) => p.status === 'sent'));
+  assert.equal(push[0].metric, null);
+  // The other stations in this run uploaded moments ago: none of them may be reported offline.
+  const all = (await db.collection(`users/${uid}/notifications`).where('kind', '==', 'offline').get()).docs;
+  assert.equal(all.length, 1, 'only the silent station');
 });
 
 test('uncalibrated critical pH: alert, no SMS', async () => {

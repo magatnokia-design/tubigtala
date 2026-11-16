@@ -9,7 +9,8 @@ Status: **draft, 24 Oct 2026.** No real hardware has produced a reading yet; eve
 ```
 users/{uid}                                  one app account's profile and alert preferences
 users/{uid}/notifications/{notificationId}   alerts for that account
-users/{uid}/alertState/{deviceId}_{metric}   last status per device and field (alert de-duplication)
+users/{uid}/alertState/{deviceId}_{metric}   last status per device and field (alert de-duplication; also the missing-value episode)
+users/{uid}/alertState/{deviceId}_offline    whether the station is offline (server-only, written by the station check)
 users/{uid}/pushTokens/{id}   one per phone with phone notifications on: { token, platform, appVersion, updatedAt } (since 16 Nov 2026)
 devices/{deviceId}                           one monitoring unit (ESP32 + probes)
 devices/{deviceId}/readings/{readingId}      one sample from that unit
@@ -33,7 +34,7 @@ Created at sign-up (email) or on the "Complete your profile" screen (Google). Th
 |---|---|---|
 | `displayName` | string | 1–60 characters. |
 | `phoneE164` | string \| null | Philippine mobile number, `+639XXXXXXXXX` (pattern enforced by rules and `mobile/src/domain/phone.ts`). Personal data: never log it. |
-| `smsAlertsEnabled` | boolean | User wants SMS alerts. Cannot be `true` while `phoneE164` is `null`. Set to `true` whenever the app saves a number (sign-up, complete profile, editing the number); the user can switch it off. **Nothing sends SMS yet** (needs Cloud Functions). |
+| `smsAlertsEnabled` | boolean | User wants SMS alerts. Cannot be `true` while `phoneE164` is `null`. Set to `true` whenever the app saves a number (sign-up, complete profile, editing the number); the user can switch it off. The backend sends SMS only while it is on (checked at send time; tested in `functions/src/readings.e2e.ts`). |
 | `pushEnabled` | boolean | User allowed app notifications and Android granted the permission. The app asks once per account per phone on first entry (after onboarding), then only via the Settings switch. While it is on, the backend sends one phone notification per alert to the phones in `pushTokens` (app 0.9.2+); switching it off removes this phone's token. |
 | `createdAt` | timestamp | Server time at creation, never changed. |
 | `updatedAt` | timestamp | Server time of the last write (rules require `== request.time`). |
@@ -42,9 +43,19 @@ Only the owner can read or write it; it cannot be deleted from the app. Email li
 
 ### `users/{uid}/notifications/{notificationId}`
 
-Alerts. Until Cloud Functions exist, the app raises them itself **while it is open** (`mobile/src/services/alerts.ts`, decision in `mobile/src/domain/alerts.ts`): one alert when a field's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`). Within 30 minutes of an alert, the same or a lower level does not alert again (a value bouncing across a limit); a worse level always does. Wording (`alertText` in `mobile/src/domain/alerts.ts`): the title names the device and what is wrong in plain words, e.g. "Tank 2: water too hot"; the body gives the value and normal range, e.g. "Water is 36.2 °C. Normal is 20 to 32 °C.", then caveats last: uncalibrated pH adds "The pH sensor is not calibrated yet, so this may be off.", simulated data adds "Test data, not a real sensor." Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
+Alerts. The backend raises them for every reading (`functions/src/readings.ts`), and the app does too while it is open (`mobile/src/services/alerts.ts`); both use the decision in `mobile/src/domain/alerts.ts` and the same document ID, so whichever runs first creates the alert: one alert when a field's status gets worse (normal → warning → critical, per `mobile/src/domain/thresholds.ts`). Within 30 minutes of an alert, the same or a lower level does not alert again (a value bouncing across a limit); a worse level always does. Wording (`alertText` in `mobile/src/domain/alerts.ts`): the title names the device and what is wrong in plain words, e.g. "Tank 2: water too hot"; the body gives the value and normal range, e.g. "Water is 36.2 °C. Normal is 20 to 32 °C.", then caveats last: uncalibrated pH adds "The pH sensor is not calibrated yet, so this may be off.", simulated data adds "Test data, not a real sensor." Fields: `title` (≤80), `body` (≤200), `deviceId`, `metric` (`ph`/`temperatureC`/`nh3GasMv`), `value` (number|null), `level` (`warning`/`critical`), `readingId`, `createdAt` (server time), `read` (false on create).
 
 The document ID is `{deviceId}_{metric}_{readingId}`, enforced by the rules. The owner may create alerts only for devices they own, mark them read, and delete them.
+
+**Station health alerts** (since 16 Nov 2026, backend only, push only - never SMS) have `metric: null`, so every app version shows their `title` and `body` as written, plus a `kind`:
+
+| `kind` | When | ID | Example |
+|---|---|---|---|
+| `sensor` (+ `sensor`: the field) | a field has had no value for 10 minutes (`SENSOR_MISSING_MS`, `functions/src/health.ts`) - longer than the gas sensor's 3-minute warm-up, so a restart never alerts; one per episode | `{deviceId}_{metric}_missing_{readingId}` | "TubigTala Station: temperature sensor not reading" / "No temperature value since 4:21 PM. Check the temperature probe and its wires." |
+| `offline` | no reading for 15 minutes - the app's own Offline rule (`mobile/src/domain/status.ts`), checked every 5 minutes by `checkStations` | `{deviceId}_offline_{lastReadingId}` | "TubigTala Station: offline" / "No readings since 4:10 PM. Check its power and Wi-Fi." |
+| `online` | readings again after an `offline` alert (`level` null) | `{deviceId}_online_{newestReadingId}` | "TubigTala Station: back online" / "Readings resumed at 4:52 PM. The last one before that was at 4:10 PM." |
+
+Value alerts have no `kind`.
 
 ### `users/{uid}/alertState/{deviceId}_{metric}`
 
@@ -56,6 +67,12 @@ Shared by all of the user's phones, so one ongoing condition raises one alert ev
 | `alertLevel` | `warning` | `critical` | null | Level of the last alert raised. |
 | `alertedAt` | timestamp | null | When that alert was raised (cooldown). |
 | `updatedAt` | timestamp | Server time of the write. |
+| `missingSince` | timestamp (absent when the field has a value) | Server only: time of the first reading in the current run without a value for this field. Deleted by the next reading that has one. |
+| `missingAlertedAt` | timestamp (absent) | Server only: when "sensor not reading" was raised for this run (one per run). |
+
+The app never writes the two `missing…` fields (its rules allow only the first four); its own `set()` of this document happens only when a value is back, which ends the run anyway.
+
+`users/{uid}/alertState/{deviceId}_offline` (server only, `functions/src/stations.ts`): `{ offline: boolean, lastReadingAt: timestamp, changedAt: timestamp }` - the station's state at the last change, so offline and back online are each announced once.
 
 ### `users/{uid}/pushTokens/{id}` (since 16 Nov 2026, app 0.9.2)
 
@@ -86,7 +103,7 @@ pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no saf
 
 ### Alert policy: phone notifications and SMS
 
-Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/`, tested on the emulator; Blaze enabled 16 Nov 2026.** Deployed, SMS goes out through TextBee (secrets `TEXTBEE_API_KEY` / `TEXTBEE_DEVICE_ID`) - first real SMS delivered 16 Nov 2026 15:33 - and phone notifications go out through **Firebase Cloud Messaging** straight from the function (decided 16 Nov 2026 instead of the Expo push service: no extra account or key) to the phones in `users/{uid}/pushTokens`, one push per alert, so they arrive while the app is closed (first one delivered 16 Nov 2026 16:25 with the app closed, 2 s after the reading; the SMS followed on the 3rd hot reading); the app no longer shows its own pop-up for alerts (it would show each twice). In the emulator both are only logged. Not built yet: the offline / sensor-not-reading checks, and the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/`, tested on the emulator; Blaze enabled 16 Nov 2026.** Deployed, SMS goes out through TextBee (secrets `TEXTBEE_API_KEY` / `TEXTBEE_DEVICE_ID`) - first real SMS delivered 16 Nov 2026 15:33 - and phone notifications go out through **Firebase Cloud Messaging** straight from the function (decided 16 Nov 2026 instead of the Expo push service: no extra account or key) to the phones in `users/{uid}/pushTokens`, one push per alert, so they arrive while the app is closed (first one delivered 16 Nov 2026 16:25 with the app closed, 2 s after the reading; the SMS followed on the 3rd hot reading); the app no longer shows its own pop-up for alerts (it would show each twice). In the emulator both are only logged. Station health alerts (sensor not reading, offline, back online - see the notifications section) were added 16 Nov 2026: push only. Not built yet: the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, through the same `alertState` transaction and alert ID as the app, so the app (while open) and the server never raise the same alert twice. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
 
 | Event | Push | SMS |
 |---|---|---|
@@ -94,7 +111,7 @@ Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifica
 | pH or temperature critical | yes | yes, after 3 critical readings in a row; pH only when calibrated |
 | Ammonia gas warning or critical | yes | no (relative reading, not ppm - SMS kept for pH and temperature) |
 | A sensor sends no value for 10 min (gas: after warm-up) | yes | no |
-| Device offline (no readings for 30 min) / back online | yes | no |
+| Device offline (no reading for 15 min - the app's Offline rule) / back online | yes | no |
 | SMS monthly limit reached | yes | no |
 
 SMS rules: one SMS per ongoing condition (same cooldown as above); conditions on the same device within a few minutes go in one SMS; at most 5 per day and 100 per month across all devices (TextBee free plan: 50/day and 300/month for the whole account, received SMS included, shared with Smilebook), counted per recipient; past a cap, alerts still go by push and the app shows that the SMS limit was reached. SMS text uses no symbols such as "°" (they switch the SMS to a format that fits fewer than half as many characters), e.g. `TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM`. Check how TextBee counts multi-part SMS against the 300 before building. The TextBee account and phone are also used by another project (Smilebook), which counts against the same monthly limit - lower `SMS_MONTH_CAP` (`functions/src/policy.ts`) by what that project sends.
@@ -128,7 +145,7 @@ Clients cannot create or delete devices. They are provisioned by an admin with `
 | `ph` | number \| null | pH, 0–14 | `null` = no valid reading (probe missing, out of range). |
 | `phCalibrated` | boolean | — | `false` means `ph` was computed from nominal constants, not a buffer calibration. The app must say so. |
 | `phMv` | number \| null | mV, 0–5500 | pH module output voltage (after undoing the divider; none on pH since firmware 0.3.1). Since 0.3.2 the **average of 1-second samples over the reading interval** (null when most samples had no value). Kept so readings can be recalculated after calibration. |
-| `temperatureC` | number \| null | °C, −10–60 | DS18B20 water temperature. `null` when disconnected (`-127`), the power-on value (`85.0`), or outside −10–60 °C (`TEMP_MIN_C`/`TEMP_MAX_C`, dropped as implausible) - so test water above 60 °C shows as no value and raises no alert; use 40–55 °C to test "too hot". |
+| `temperatureC` | number \| null | °C, −10–125 | DS18B20 water temperature. `null` when disconnected (`-127`), the power-on value (`85.0`), or outside −10–125 °C (`TEMP_MIN_C`/`TEMP_MAX_C`; 125 is the sensor's own limit). Firmware up to 0.3.2 (and rules before 16 Nov 2026) stopped at 60 °C, so hotter test water uploaded as no value and raised no alert; 0.3.3 reports it, and it shows as "Too hot". |
 | `nh3GasMv` | number \| null | mV, 0–5500 | MQ-137 module analog output voltage (after undoing the divider); since firmware 0.3.2 the average of 1-second samples over the reading interval. **Ammonia gas in air above the water, uncalibrated.** Not ppm, not dissolved ammonia. Higher = more gas, relative only. |
 | `simulated` | boolean | — | `true` = generated by the simulator, not a sensor. |
 | `firmware` | string | 1–32 chars | Firmware or simulator version string. |

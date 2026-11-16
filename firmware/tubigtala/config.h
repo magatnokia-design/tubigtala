@@ -2,7 +2,7 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.3.2"
+#define FIRMWARE_VERSION "0.3.3"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V
@@ -60,7 +60,11 @@
 #define PH_MIN 0.0f
 #define PH_MAX 14.0f
 #define TEMP_MIN_C -10.0f
-#define TEMP_MAX_C 60.0f
+// The DS18B20's own upper limit. Up to 0.3.2 this was 60, so water hotter than that (a kettle
+// test, 16 Nov 2026) uploaded as no value and raised no alert instead of "Too hot". Its two
+// error codes are still rejected separately: -127 (no probe) and exactly 85.0 (power-on value).
+// Firestore rules accept up to the same 125 (firestore.rules, readings).
+#define TEMP_MAX_C 125.0f
 #define MODULE_MV_MAX 5500.0f
 
 // ---- Cloud upload (cloud.cpp) ----

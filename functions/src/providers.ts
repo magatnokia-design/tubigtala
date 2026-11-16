@@ -111,6 +111,12 @@ export function textbeeProviders(apiKey: string, deviceId: string, fetchFn: Fetc
   };
 }
 
+/** For functions that only push (the station check): no TextBee secrets needed. The emulator logs. */
+export function pushOnlyProviders(): Providers {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') return logProviders;
+  return { sms: logProviders.sms, push: fcmPush(getMessaging()) };
+}
+
 /**
  * The emulator always logs (no real SMS or push from tests). Deployed functions push through FCM
  * and send SMS through TextBee with the two secrets; if either secret is empty, SMS falls back to
