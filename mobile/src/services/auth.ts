@@ -7,6 +7,7 @@ import {
 } from 'firebase/auth';
 
 import { auth, usingEmulator } from '@/services/firebase';
+import { unregisterPushToken } from '@/services/notifications';
 import { createProfile } from '@/services/profile';
 
 export type { User };
@@ -93,6 +94,10 @@ export async function changePassword(currentPassword: string, newPassword: strin
 }
 
 export async function signOut(): Promise<void> {
+  // Stop alert notifications to this phone first: once signed out, the app can no longer delete
+  // its push address, and the next person to use the phone would get this account's alerts.
+  const uid = auth.currentUser?.uid;
+  if (uid) await unregisterPushToken(uid).catch(() => undefined);
   if (nativeGoogleAvailable) {
     // Also forget the Google account on the phone, so the next sign-in shows the account chooser.
     const { GoogleSignin } = await import('@react-native-google-signin/google-signin');

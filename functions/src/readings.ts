@@ -3,7 +3,9 @@
 //     alertState transaction as the app (domain/alerts.ts nextAlertStep), writing the in-app
 //     alert with the same document ID. The app may still raise alerts while open; whichever
 //     commits first wins and the other sees the updated state, so there is one alert either way.
-//  2. If a field is critical, pH (calibrated) or temperature, for SMS_STREAK readings in a row:
+//  2. If this reading has an alert (raised here or by the app): one phone push per alert to the
+//     owner's registered phones (users/{uid}/pushTokens), when phone notifications are on.
+//  3. If a field is critical, pH (calibrated) or temperature, for SMS_STREAK readings in a row:
 //     one SMS per alert episode, within the account-wide day/month caps.
 // No email (dropped 13 Nov 2026): alerts reach the user as in-app/phone notifications and SMS.
 // Deliveries are recorded in alertDeliveries/{id}, created before sending: a second run for the
@@ -20,6 +22,26 @@ import {
 import type { Providers } from './providers.ts';
 
 const METRICS: Metric[] = ['ph', 'temperatureC', 'nh3GasMv'];
+const ALREADY_EXISTS = 6; // gRPC status code from create() on an existing document
+
+/** Creates the delivery record; false if it already exists (this delivery was already handled). */
+async function claim(db: Firestore, id: string, data: DocumentData): Promise<boolean> {
+  try {
+    await db.doc(`alertDeliveries/${id}`).create({ ...data, status: 'sending', createdAt: FieldValue.serverTimestamp() });
+    return true;
+  } catch (e) {
+    if ((e as { code?: number }).code === ALREADY_EXISTS) return false;
+    throw e;
+  }
+}
+
+/** An alert this reading raised (here or in the app), as stored in users/{uid}/notifications. */
+interface PushAlert {
+  metric: Metric;
+  alertId: string;
+  title: string;
+  body: string;
+}
 
 function toAlertState(d: DocumentData | undefined): AlertState | null {
   if (!d) return null;
@@ -51,6 +73,7 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
   const readingMs = reading.serverTime instanceof Timestamp ? reading.serverTime.toMillis() : (deps.nowMs ?? Date.now)();
 
   const critical: (SmsItem & { alertedAtMs: number })[] = [];
+  const alerts: PushAlert[] = [];
 
   for (const metric of METRICS) {
     const value = typeof reading[metric] === 'number' ? (reading[metric] as number) : null;
@@ -87,14 +110,50 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
       return step.state;
     });
 
+    if (status.level === 'normal') continue;
+    // Did this reading raise an alert, here or in the app (if it was open)? Its ID is fixed, so look.
+    const alert = await alertRef.get();
+    if (alert.exists) alerts.push({ metric, alertId: alertRef.id, title: String(alert.get('title')), body: String(alert.get('body')) });
     if (status.level === 'critical' && after?.alertLevel === 'critical' && after.alertedAtMs !== null && value !== null) {
       critical.push({ metric, label: status.label, value, alertedAtMs: after.alertedAtMs });
     }
   }
 
-  if (critical.length === 0) return;
+  if (alerts.length === 0 && critical.length === 0) return;
   const profile = (await db.doc(`users/${uid}`).get()).data();
-  await sendSms(deps, { uid, deviceId, readingId, deviceName, simulated, phCalibrated, readingMs, profile }, critical);
+  const ctx = { uid, deviceId, readingId, deviceName, simulated, phCalibrated, readingMs, profile };
+  if (alerts.length > 0) await sendPush(deps, ctx, alerts);
+  if (critical.length > 0) await sendSms(deps, ctx, critical);
+}
+
+/**
+ * One push per alert to every phone the owner registered, when phone notifications are on.
+ * Recorded in alertDeliveries (push_{uid}_{alertId}) before sending, so a retried run sends
+ * nothing twice. Tokens FCM rejects for good are deleted.
+ */
+async function sendPush(deps: Deps, ctx: Ctx, alerts: PushAlert[]): Promise<void> {
+  const { db } = deps;
+  if (ctx.profile?.pushEnabled !== true) return;
+  const tokenDocs = (await db.collection(`users/${ctx.uid}/pushTokens`).get()).docs;
+  const tokens = [...new Set(tokenDocs.map((d) => d.get('token')).filter((t): t is string => typeof t === 'string' && t.length >= 20))];
+  for (const a of alerts) {
+    const id = `push_${ctx.uid}_${a.alertId}`;
+    if (!(await claim(db, id, { channel: 'push', uid: ctx.uid, deviceId: ctx.deviceId, readingId: ctx.readingId, metric: a.metric }))) continue;
+    if (tokens.length === 0) {
+      await db.doc(`alertDeliveries/${id}`).update({ status: 'skipped: no phone registered', updatedAt: FieldValue.serverTimestamp() });
+      continue;
+    }
+    const result = await deps.providers.push(tokens, { title: a.title, body: a.body, tag: a.alertId })
+      .catch((e: unknown) => ({ ok: false, detail: String(e).slice(0, 200), invalidTokens: [] as string[] }));
+    await db.doc(`alertDeliveries/${id}`).update({ status: result.ok ? 'sent' : 'failed', detail: result.detail, updatedAt: FieldValue.serverTimestamp() });
+    if (result.invalidTokens.length > 0) {
+      const dead = new Set(result.invalidTokens);
+      const batch = db.batch();
+      for (const d of tokenDocs) if (dead.has(d.get('token'))) batch.delete(d.ref);
+      await batch.commit();
+      logger.info(`removed ${dead.size} push token(s) that FCM no longer accepts`);
+    }
+  }
 }
 
 interface Ctx {
