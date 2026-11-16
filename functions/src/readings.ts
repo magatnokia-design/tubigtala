@@ -12,6 +12,8 @@
 //  4. A field with no value: after SENSOR_MISSING_MS without one, one "sensor not reading" alert
 //     (push only), tracked in the same alertState document (missingSince, missingAlertedAt).
 //     Station offline: stations.ts.
+//  5. The gas sensor warming up after a power-on (domain/warmup.ts): its values are skipped -
+//     no alert, no "not reading" - for its first 15 minutes, as the Water card shows it.
 // No email (dropped 13 Nov 2026): alerts reach the user as in-app/phone notifications and SMS.
 // Deliveries are recorded in alertDeliveries/{id}, created before sending: a second run for the
 // same reading or episode finds the record and sends nothing. The app cannot read these records.
@@ -21,6 +23,7 @@ import { logger } from 'firebase-functions';
 import { alertText, nextAlertStep, type AlertState } from '../../mobile/src/domain/alerts.ts';
 import { limitsFromDoc, toStored } from '../../mobile/src/domain/limits.ts';
 import { classify, type Metric } from '../../mobile/src/domain/thresholds.ts';
+import { warmingUp } from '../../mobile/src/domain/warmup.ts';
 import { missingStep, sensorMissingText } from './health.ts';
 import {
   isCriticalStreak, maskPhone, reserveSms, smsMetricAllowed, smsText, SMS_STREAK,
@@ -82,6 +85,9 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
   const { limits } = limitsFromDoc(device.limits);
   // Server time of the reading drives the cooldown. Fall back to now if missing.
   const readingMs = reading.serverTime instanceof Timestamp ? reading.serverTime.toMillis() : (deps.nowMs ?? Date.now)();
+  // For the gas sensor's warm-up after a power-on (domain/warmup.ts, same rule as the Water card).
+  const warmup = { seq: typeof reading.seq === 'number' ? reading.seq : null, simulated };
+  const intervalSec = typeof device.readingIntervalSec === 'number' && device.readingIntervalSec > 0 ? device.readingIntervalSec : 60;
 
   const critical: (SmsItem & { alertedAtMs: number })[] = [];
   const alerts: PushAlert[] = [];
@@ -91,6 +97,14 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
     const range = limits[metric];
     const status = classify(metric, value, range);
     const stateRef = db.doc(`users/${uid}/alertState/${deviceId}_${metric}`);
+
+    if (warmingUp(metric, warmup, intervalSec)) {
+      // The gas sensor is still warming up after a power-on: its value says nothing yet, so no
+      // alert and no "not reading" (decided 16 Nov 2026; it used to raise "a bit high" each time).
+      // A value still ends an earlier missing-value run, as below.
+      if (value !== null) await endMissing(db, stateRef);
+      continue;
+    }
 
     if (status.level === 'unknown') {
       // No value says nothing about the water, but if it lasts the sensor needs looking at.
@@ -153,6 +167,16 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
   const ctx = { uid, deviceId, readingId, deviceName, simulated, phCalibrated, readingMs, profile };
   if (alerts.length > 0) await sendPush(deps, ctx, alerts);
   if (critical.length > 0) await sendSms(deps, ctx, critical);
+}
+
+/** A value is back: ends the missing-value run (if any) without touching the alert level. */
+async function endMissing(db: Firestore, stateRef: DocumentReference): Promise<void> {
+  await db.runTransaction(async (tx) => {
+    const raw = (await tx.get(stateRef)).data();
+    if (raw?.missingSince != null || raw?.missingAlertedAt != null) {
+      tx.update(stateRef, { missingSince: FieldValue.delete(), missingAlertedAt: FieldValue.delete() });
+    }
+  });
 }
 
 /**

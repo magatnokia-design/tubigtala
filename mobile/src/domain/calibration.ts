@@ -30,6 +30,9 @@ export const STABLE_WITHIN_MV = 5;
 /** How many recent readings must agree before a buffer value can be saved. */
 export const STABLE_READINGS = 3;
 
+/** The station reads its calibration every 10 minutes (firmware cloud.cpp), so a new one is in use within this. */
+export const CALIBRATION_PICKUP_MS = 10 * 60_000;
+
 /** "6.86" / "7.00": how buffer values are shown and stored in the method text. */
 export const bufferText = (ph: number) => ph.toFixed(2);
 

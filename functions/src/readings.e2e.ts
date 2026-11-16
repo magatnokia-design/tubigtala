@@ -34,7 +34,9 @@ async function addDevice(id: string, simulated: boolean) {
 }
 
 let seq = 0;
-type Values = { ph?: number | null; temperatureC?: number | null; nh3GasMv?: number | null; phCalibrated?: boolean; at?: number };
+// `seq`: readings since the station powered on (domain/warmup.ts). Left out, it is large: a station
+// that has been running a while, so the gas warm-up does not apply.
+type Values = { ph?: number | null; temperatureC?: number | null; nh3GasMv?: number | null; phCalibrated?: boolean; at?: number; seq?: number };
 /** Default unless given - null included (a field without a value), unlike `??`. */
 const given = <T>(v: T | undefined, fallback: T): T => (v === undefined ? fallback : v);
 /**
@@ -44,7 +46,7 @@ const given = <T>(v: T | undefined, fallback: T): T => (v === undefined ? fallba
 async function upload(deviceId: string, values: Values[], simulated = false) {
   for (const v of values) {
     await db.doc(`devices/${deviceId}/readings/e2e-${seq++}`).create({
-      bootId: 'e2e', seq, serverTime: v.at === undefined ? FieldValue.serverTimestamp() : Timestamp.fromMillis(v.at), deviceTime: null,
+      bootId: 'e2e', seq: v.seq ?? 1000 + seq, serverTime: v.at === undefined ? FieldValue.serverTimestamp() : Timestamp.fromMillis(v.at), deviceTime: null,
       ph: given(v.ph, 7.0), phCalibrated: v.phCalibrated ?? true, phMv: 2500, temperatureC: given(v.temperatureC, 27), nh3GasMv: given(v.nh3GasMv, 1400),
       simulated, firmware: 'e2e',
     });
@@ -89,7 +91,7 @@ test('critical temperature: one alert, one SMS after 3 readings, none repeated, 
   assert.equal(sms[0].metric, 'temperatureC');
   const alerts = await alertsFor('e2e-real', 'temperatureC');
   assert.equal(alerts.length, 1, 'one alert for one ongoing condition');
-  assert.equal(alerts[0].title, 'e2e-real: water too hot');
+  assert.equal(alerts[0].title, 'e2e-real: water too hot (40.0 °C)');
   assert.equal((await deliveries('e2e-real', 'email')).length, 0, 'email alerts were dropped (13 Nov 2026)');
   const push = await deliveries('e2e-real', 'push');
   assert.equal(push.length, 1, 'one phone push, for the reading that raised the alert');
@@ -244,7 +246,7 @@ test("the station's own alert limits: alert text, stored limits and SMS follow t
   assert.equal(sms[0].status, 'sent');
   const alerts = await alertsFor('e2e-limits', 'temperatureC');
   assert.equal(alerts.length, 1);
-  assert.equal(alerts[0].title, 'e2e-limits: water too hot');
+  assert.equal(alerts[0].title, 'e2e-limits: water too hot (31.0 °C)');
   assert.equal(alerts[0].level, 'critical');
   assert.match(alerts[0].body, /Normal is 20 to 28 °C\./);
   assert.deepEqual(alerts[0].limits, { normalMin: 20, normalMax: 28, criticalBelow: 15, criticalAbove: 30 }, 'stored with the alert');
@@ -259,7 +261,31 @@ test("the station's own alert limits: alert text, stored limits and SMS follow t
     const a = await alertsFor('e2e-badlimits', 'temperatureC');
     return a.length ? a : undefined;
   });
-  assert.equal(bad[0].title, 'e2e-badlimits: water a bit warm');
+  assert.equal(bad[0].title, 'e2e-badlimits: water a bit warm (33.0 °C)');
   assert.match(bad[0].body, /Normal is 20 to 32 °C\./);
   assert.deepEqual(bad[0].limits, { normalMin: 20, normalMax: 32, criticalBelow: 15, criticalAbove: 35 });
+});
+
+test('gas warm-up after a power-on: no gas alert for 15 minutes, then the normal rules', async () => {
+  // Like tank-01 on 16 Nov 2026: no gas value for 3 minutes, then high values that drift down.
+  await addDevice('e2e-warmup', false);
+  await upload('e2e-warmup', [
+    { seq: 0, nh3GasMv: null }, { seq: 1, nh3GasMv: null }, { seq: 4, nh3GasMv: 1844 }, { seq: 10, nh3GasMv: 2400 },
+  ]);
+  await sleep(3000);
+  assert.equal((await alertsFor('e2e-warmup', 'nh3GasMv')).length, 0, 'warming up: no "a bit high", not even "too high"');
+  assert.equal((await alertsOfKind('e2e-warmup', 'sensor')).length, 0, 'warm-up nulls are not "sensor not reading"');
+  const state = (await db.doc(`users/${uid}/alertState/e2e-warmup_nh3GasMv`).get()).data();
+  assert.equal(state?.missingSince, undefined, 'no missing-value run started by warm-up nulls');
+
+  // 15 minutes after power-on the sensor counts again.
+  await upload('e2e-warmup', [{ seq: 15, nh3GasMv: 1844 }]);
+  const alerts = await until('gas alert after warm-up', async () => {
+    const a = await alertsFor('e2e-warmup', 'nh3GasMv');
+    return a.length ? a : undefined;
+  });
+  assert.equal(alerts[0].title, 'e2e-warmup: ammonia gas a bit high (1844 mV)');
+  assert.match(alerts[0].body, /A relative reading, not ppm\./);
+  // The other sensors were never held back.
+  assert.equal((await alertsFor('e2e-warmup', 'temperatureC')).length, 0);
 });

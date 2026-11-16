@@ -43,12 +43,12 @@ test('caps: 5 a day, 100 a month, counters restart with the Philippine day/month
 
 test('SMS text: plain GSM characters, one text, all critical fields', () => {
   assert.equal(manilaClock(T), '3:42 PM');
-  assert.equal(smsText('Tank 1', [{ metric: 'ph', label: 'Too high', value: 9.4 }], T),
-    'TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM');
-  const two = smsText('Tank 1', [{ metric: 'ph', label: 'Too low', value: 5.8 }, { metric: 'temperatureC', label: 'Too hot', value: 36.24 }], T);
-  assert.equal(two, 'TubigTala: Tank 1 pH TOO LOW 5.8 (normal 6.5-8.5); water TOO HOT 36.2 C (normal 20-32 C) at 3:42 PM');
+  assert.equal(smsText('Tank 1', [{ metric: 'ph', label: 'Too alkaline', value: 9.4 }], T),
+    'TubigTala: Tank 1 pH 9.4 TOO ALKALINE (normal 6.5-8.5) at 3:42 PM');
+  const two = smsText('Tank 1', [{ metric: 'ph', label: 'Too acidic', value: 5.8 }, { metric: 'temperatureC', label: 'Too hot', value: 36.24 }], T);
+  assert.equal(two, 'TubigTala: Tank 1 pH 5.8 TOO ACIDIC (normal 6.5-8.5); water 36.2 C TOO HOT (normal 20-32 C) at 3:42 PM');
   // worst case: a 40-character name with emoji/degree signs, two fields
-  const long = smsText('Tänk 🐟 °'.padEnd(40, 'x'), [{ metric: 'ph', label: 'Too high', value: 13.9 }, { metric: 'temperatureC', label: 'Too cold', value: -9.9 }], T);
+  const long = smsText('Tänk 🐟 °'.padEnd(40, 'x'), [{ metric: 'ph', label: 'Too alkaline', value: 13.9 }, { metric: 'temperatureC', label: 'Too cold', value: -9.9 }], T);
   assert.ok(long.length <= 160, `${long.length} chars`);
   assert.match(long, /^[A-Za-z0-9 .,:;()'!?#&+\-_/]+$/, 'only GSM-safe characters');
 });
@@ -63,13 +63,13 @@ test("the station's own limits decide the streak and the SMS text", () => {
   assert.equal(isCriticalStreak('temperatureC', [31, 31, 31]), false);
   assert.equal(isCriticalStreak('temperatureC', [31, 31, 31], warm), true);
   assert.equal(smsText('Tank 1', [{ metric: 'temperatureC', label: 'Too hot', value: 31, range: warm }], T),
-    'TubigTala: Tank 1 water TOO HOT 31.0 C (normal 20-28 C) at 3:42 PM');
+    'TubigTala: Tank 1 water 31.0 C TOO HOT (normal 20-28 C) at 3:42 PM');
   // A normal range starting below zero is written with "to", not a double minus.
   const cold = { normal: [-5, 10] as [number, number], warning: [-10, 15] as [number, number] };
   assert.equal(smsText('Tank 1', [{ metric: 'temperatureC', label: 'Too hot', value: 16, range: cold }], T),
-    'TubigTala: Tank 1 water TOO HOT 16.0 C (normal -5 to 10 C) at 3:42 PM');
+    'TubigTala: Tank 1 water 16.0 C TOO HOT (normal -5 to 10 C) at 3:42 PM');
   // Worst case length with custom decimals still fits one SMS.
   const ph = { normal: [6.8, 8.2] as [number, number], warning: [6.5, 8.5] as [number, number] };
-  const long = smsText('x'.repeat(40), [{ metric: 'ph', label: 'Too high', value: 13.9, range: ph }, { metric: 'temperatureC', label: 'Too cold', value: -9.9, range: cold }], T);
+  const long = smsText('x'.repeat(40), [{ metric: 'ph', label: 'Too alkaline', value: 13.9, range: ph }, { metric: 'temperatureC', label: 'Too cold', value: -9.9, range: cold }], T);
   assert.ok(long.length <= 160, `${long.length} chars`);
 });

@@ -57,14 +57,14 @@ test('validRange: same rules as firestore.rules validLimits', () => {
 test('classify, wording and insights use the station limits', () => {
   // 6.6 is normal by default but outside the tighter normal range, still above its critical limit.
   assert.equal(classify('ph', 6.6).level, 'normal');
-  assert.deepEqual(classify('ph', 6.6, PH_TIGHT), { level: 'warning', label: 'A bit low' });
-  assert.deepEqual(classify('ph', 6.4, PH_TIGHT), { level: 'critical', label: 'Too low' });
+  assert.deepEqual(classify('ph', 6.6, PH_TIGHT), { level: 'warning', label: 'A bit acidic' });
+  assert.deepEqual(classify('ph', 6.4, PH_TIGHT), { level: 'critical', label: 'Too acidic' });
   assert.equal(normalRangeText('ph', PH_TIGHT), '6.8 to 8.0');
-  assert.equal(alertDetail('ph', 6.6, PH_TIGHT), '6.6 · normal 6.8 to 8.0');
-  assert.equal(alertText('ph', 'A bit low', 6.6, 'Tank', { simulated: false, uncalibrated: false, range: PH_TIGHT }).body,
-    'pH is 6.6. Normal is 6.8 to 8.0.');
-  assert.equal(alertText('ph', 'Too high', 9.4, 'Tank', { simulated: false, uncalibrated: false }).body,
-    'pH is 9.4. Normal is 6.5 to 8.5.', 'no range = the defaults, as before');
+  assert.equal(alertDetail('ph', 6.6, PH_TIGHT), 'pH 6.6 · normal 6.8 to 8.0');
+  assert.equal(alertText('ph', 'A bit acidic', 6.6, 'Tank', { simulated: false, uncalibrated: false, range: PH_TIGHT }).body,
+    'pH is 6.6. Normal is 6.8 to 8.0. Lower pH means more acidic.');
+  assert.equal(alertText('ph', 'Too alkaline', 9.4, 'Tank', { simulated: false, uncalibrated: false }).body,
+    'pH is 9.4. Normal is 6.5 to 8.5. Higher pH means more alkaline.', 'no range = the defaults, as before');
   const samples = [6.6, 7.0, 7.5, 8.2].map((v, i) => ({ t: i, v }));
   assert.equal(insight('ph', samples).normalPct, 100);
   assert.equal(insight('ph', samples, PH_TIGHT).normalPct, 50);
@@ -101,14 +101,14 @@ test('export: statuses and the normal range use the station limits; alerts keep 
   const sheets = exportSheets({
     deviceName: 'Tank', simulated: false, range: { start: 0, end: 0 }, metrics: ['ph'], generatedAt: 0, truncated: false,
     readings: [{ t: 1, ph: 6.6, phCalibrated: true, temperatureC: null, nh3GasMv: null }],
-    // Raised before the limits changed (stored with the defaults): stays "Too high".
-    alerts: [{ t: 1, metric: 'ph', title: 'Tank: pH too high', body: '', value: 9.2, level: 'critical', limits: null }],
+    // Raised before the limits changed (stored with the defaults): stays "Too alkaline".
+    alerts: [{ t: 1, metric: 'ph', title: 'Tank: water too alkaline (pH 9.2)', body: '', value: 9.2, level: 'critical', limits: null }],
     limits: { ...RANGES, ph: PH_TIGHT },
     customLimits: true,
   });
   const text = JSON.stringify(sheets);
   assert.ok(text.includes('6.8 to 8.0'), 'normal range column');
-  assert.ok(text.includes('A bit low'), '6.6 with the tighter limits');
+  assert.ok(text.includes('A bit acidic'), '6.6 with the tighter limits');
   assert.ok(text.includes('this station uses its own limits'));
-  assert.ok(JSON.stringify(sheets[2].rows).includes('Too high'));
+  assert.ok(JSON.stringify(sheets[2].rows).includes('Too alkaline'));
 });

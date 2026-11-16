@@ -10,9 +10,9 @@ import { Notice } from '@/components/notice';
 import { ThemedText } from '@/components/themed-text';
 import { METRIC_ICON } from '@/constants/metric-icons';
 import { Radius, Spacing } from '@/constants/theme';
-import { alertDetail, alertHeadline } from '@/domain/alerts';
-import { formatAge, formatDateTime, formatNumber } from '@/domain/format';
-import { classify, METRIC_INFO, normalRangeText, RANGES, type Level } from '@/domain/thresholds';
+import { alertDetail, alertHeadline, alertMeaning, valueText } from '@/domain/alerts';
+import { formatAge, formatDateTime } from '@/domain/format';
+import { classify, normalRangeText, RANGES, type Level } from '@/domain/thresholds';
 import type { AppNotification } from '@/domain/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useDialog } from '@/hooks/use-dialog';
@@ -167,9 +167,13 @@ export default function NotificationsScreen() {
                 <>
                   <Detail
                     label="Reading"
-                    value={`${formatNumber(open.value, METRIC_INFO[open.metric].decimals)}${METRIC_INFO[open.metric].unit ? ` ${METRIC_INFO[open.metric].unit}` : ''}`}
+                    value={valueText(open.metric, open.value)}
                   />
                   <Detail label="Normal" value={normalRangeText(open.metric, open.limits ?? RANGES[open.metric])} />
+                  {/* For pH: what acidic / alkaline water can mean, so the words are not left unexplained. */}
+                  {alertMeaning(open.metric, open.value, open.limits ?? RANGES[open.metric]) && (
+                    <ThemedText type="small" themeColor="textSecondary">{alertMeaning(open.metric, open.value, open.limits ?? RANGES[open.metric])}</ThemedText>
+                  )}
                 </>
               ) : (
                 <ThemedText type="small" themeColor="textSecondary">{open.body}</ThemedText>

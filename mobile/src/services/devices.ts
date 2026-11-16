@@ -47,6 +47,7 @@ function toReading(s: QueryDocumentSnapshot<DocumentData>): Reading | null {
   return {
     id: s.id,
     serverTimeMs,
+    seq: numOrNull(d.seq),
     deviceTimeMs: millisOrNull(d.deviceTime),
     ph: numOrNull(d.ph),
     phCalibrated: d.phCalibrated === true,

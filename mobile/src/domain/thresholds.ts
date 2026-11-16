@@ -10,8 +10,10 @@
 // Ammonia gas is an uncalibrated relative mV value; its ranges come from the sensor's measured
 // clean-air baseline (see RANGES below and docs/data-model.md), not from a ppm calibration.
 //
-// Status words are plain on purpose ("too high", not "too basic"): they appear on the cards
-// and in alert titles, and a user should understand them without chemistry terms.
+// Status words say what is happening, in everyday words: "too hot", and for pH "too acidic" /
+// "too alkaline" (decided 16 Nov 2026: "too high" did not tell users what a high pH means). The
+// usual words for tap water: below 7 acidic, above 7 alkaline ("alkaline water" is a familiar
+// term; "too basic" reads like "too simple"). They appear on the cards and in alert titles.
 
 export type Metric = 'ph' | 'temperatureC' | 'nh3GasMv';
 export type Level = 'normal' | 'warning' | 'critical' | 'unknown';
@@ -34,7 +36,7 @@ export const RANGES: Record<Metric, Range> = {
 
 export const METRIC_INFO: Record<Metric, { name: string; unit: string; decimals: number; low: [string, string]; high: [string, string] }> = {
   // [warning word, critical word]
-  ph: { name: 'pH level', unit: '', decimals: 1, low: ['A bit low', 'Too low'], high: ['A bit high', 'Too high'] },
+  ph: { name: 'pH level', unit: '', decimals: 1, low: ['A bit acidic', 'Too acidic'], high: ['A bit alkaline', 'Too alkaline'] },
   temperatureC: { name: 'Temperature', unit: '°C', decimals: 1, low: ['A bit cold', 'Too cold'], high: ['A bit warm', 'Too hot'] },
   nh3GasMv: { name: 'Ammonia gas', unit: 'mV', decimals: 0, low: ['Low', 'Low'], high: ['A bit high', 'Too high'] },
 };
