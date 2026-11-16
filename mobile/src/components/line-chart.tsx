@@ -108,7 +108,8 @@ export function LineChart({ points, decimals, color, gradientId, band, height, g
             </LinearGradient>
           </Defs>
           {ticks.map((v) => (
-            <Line key={v} x1={pad.left} x2={width - pad.right} y1={y(v)} y2={y(v)} stroke={theme.border} strokeDasharray="4 4" />
+            // Faint solid guide lines (dashed until 0.9.2): the line and the green normal band stand out.
+            <Line key={v} x1={pad.left} x2={width - pad.right} y1={y(v)} y2={y(v)} stroke={theme.border} strokeWidth={1} strokeOpacity={0.6} />
           ))}
           {ticks.map((v) => (
             <SvgText key={`l${v}`} x={pad.left - 6} y={y(v) + 4} fontSize={11} fill={theme.textSecondary} textAnchor="end" fontFamily={Fonts?.sans}>
@@ -139,5 +140,5 @@ export function LineChart({ points, decimals, color, gradientId, band, height, g
 const styles = StyleSheet.create({
   fill: { flex: 1, minHeight: MIN_FILL_HEIGHT },
   empty: { alignItems: 'center', justifyContent: 'center' },
-  emptyLine: { position: 'absolute', left: PAD.left, right: PAD.right, borderTopWidth: 1, borderStyle: 'dashed' },
+  emptyLine: { position: 'absolute', left: PAD.left, right: PAD.right, borderTopWidth: 1, opacity: 0.6 },
 });

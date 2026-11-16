@@ -44,6 +44,11 @@ export interface AppNotification {
   metric: 'ph' | 'temperatureC' | 'nh3GasMv' | null;
   value: number | null;
   level: 'warning' | 'critical' | null;
+  /**
+   * Station health alerts from the backend (docs/data-model.md): a sensor without values,
+   * the station offline, or back online. null = an alert about a reading's value.
+   */
+  kind: 'sensor' | 'offline' | 'online' | null;
   createdAtMs: number;
   read: boolean;
 }

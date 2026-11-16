@@ -43,7 +43,14 @@ export default function NotificationsScreen() {
    * stored title/body (with the station name) stay for the phone notification and older alerts.
    */
   function describe(n: AppNotification): { icon: AndroidSymbol; headline: string; detail: string; level: Level; label: string | null } {
-    if (!n.metric) return { icon: n.level === 'critical' ? 'error' : 'warning', headline: n.title, detail: n.body, level: n.level ?? 'unknown', label: null };
+    // Station health alerts (and any alert without a field) show their own title and text.
+    if (!n.metric) {
+      const icon: AndroidSymbol = n.kind === 'offline' ? 'wifi_off' : n.kind === 'online' ? 'wifi'
+        : n.kind === 'sensor' ? 'sensors_off' : n.level === 'critical' ? 'error' : 'warning';
+      // "Back online" is good news: green, not the grey of an unknown level.
+      const level: Level = n.kind === 'online' ? 'normal' : n.level ?? 'unknown';
+      return { icon, headline: n.title, detail: n.body, level, label: null };
+    }
     const status = classify(n.metric, n.value);
     const detail = alertDetail(n.metric, n.value);
     return {

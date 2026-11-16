@@ -24,6 +24,7 @@ function toNotification(id: string, d: Record<string, unknown>): AppNotification
     metric: METRICS.find((m) => m === d.metric) ?? null,
     value: typeof d.value === 'number' ? d.value : null,
     level: d.level === 'warning' || d.level === 'critical' ? d.level : null,
+    kind: d.kind === 'sensor' || d.kind === 'offline' || d.kind === 'online' ? d.kind : null,
     createdAtMs: d.createdAt instanceof Timestamp ? d.createdAt.toMillis() : 0,
     read: d.read === true,
   };
