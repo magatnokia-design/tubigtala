@@ -17,8 +17,9 @@ export const steps = [
 export const features = [
   { icon: 'water_drop', title: 'Live readings', text: 'Temperature, pH and ammonia gas, refreshed every minute, coloured green, amber or red.' },
   // SMS rule as in functions/src/policy.ts: temperature, or pH once calibrated, critical for
-  // SMS_STREAK (3) readings in a row. Live since 16 Nov 2026 (first SMS delivered that day).
-  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, and an SMS when the temperature or the calibrated pH stays critical for three readings in a row.' },
+  // SMS_STREAK (3) readings in a row. Both channels verified 16 Nov 2026 with the app closed
+  // (push from the server via Firebase Cloud Messaging, app 0.9.2+).
+  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, even when the app is closed, and an SMS when the temperature or the calibrated pH stays critical for three readings in a row.' },
   { icon: 'monitoring', title: 'Charts and insights', text: 'The last hour live, or any day or week since data started, with highs, lows and trends.' },
   { icon: 'download', title: 'Excel export', text: 'Pick today, one day or a date range and save the readings as a spreadsheet.' },
   { icon: 'qr_code_scanner', title: 'Scan to pair', text: 'Add your station by scanning the QR sticker on it. No setup codes to type.' },
