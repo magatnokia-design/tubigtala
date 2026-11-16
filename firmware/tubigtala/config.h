@@ -2,7 +2,7 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.3.0"
+#define FIRMWARE_VERSION "0.3.1"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V
@@ -26,7 +26,13 @@
 #define ADC_SATURATED_MV 3100  // at 11 dB attenuation the ESP32 ADC clips above ~3.1 V
 
 // Divider ratio = bottom / (top + bottom). Firmware divides by this to report module output.
-#define PH_DIVIDER_RATIO 0.6f   // (unverified) 10k top / 15k bottom
+// pH: NO divider since 0.3.1 (16 Nov 2026). Po -> 10 kOhm in series -> G34, no 15 kOhm to GND, so
+// the pin reads the board's own output. On tank-01 the 15 kOhm never reached GND/G34 (removing it
+// changed nothing) and adding one beside it stopped the ESP32 (EN row suspected). The 10 kOhm limits
+// the current into G34's protection diode to ~0.15 mA if Po goes above 3.3 V (probe out of liquid).
+// Zero (BNC shorted) ~2.54 V, so pH ~3.5-14 stays under the 3.1 V clip. Keep the probe in liquid.
+// The app's two-point calibration uses these mV, so changing this ratio means calibrating again.
+#define PH_DIVIDER_RATIO 1.0f
 #define NH3_DIVIDER_RATIO 0.6f  // (unverified) 10k top / 15k bottom
 
 // pH: nominal PH-4502C voltages, used until a calibration is saved in the app (Settings >
