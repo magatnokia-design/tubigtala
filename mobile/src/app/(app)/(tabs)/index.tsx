@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/button';
 import { DeviceSwitcher } from '@/components/device-switcher';
 import { Icon } from '@/components/icon';
-import { MetricCard, type Tag } from '@/components/metric-card';
+import { MetricCard, type CardWait, type Tag } from '@/components/metric-card';
 import { Notice } from '@/components/notice';
 import { OfflineBanner } from '@/components/offline-banner';
 import { ScaleBar } from '@/components/scale-bar';
@@ -15,11 +15,13 @@ import { StatusPill } from '@/components/status-pill';
 import { ThemedText } from '@/components/themed-text';
 import { METRIC_ICON } from '@/constants/metric-icons';
 import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
+import { CALIBRATION_PICKUP_MS } from '@/domain/calibration';
 import { formatAge, formatNumber } from '@/domain/format';
 import { STATION_NAME } from '@/domain/pairing';
 import { deviceStatus } from '@/domain/status';
 import { limitsOf } from '@/domain/limits';
-import { classify, normalRangeText } from '@/domain/thresholds';
+import { classify, normalRangeText, type Metric } from '@/domain/thresholds';
+import { GAS_SETTLE_MS, gasWarmupLeftMs, isFirstReading, warmingUp } from '@/domain/warmup';
 import { useLatestReading } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
 import { useNotifications } from '@/hooks/use-profile';
@@ -29,7 +31,8 @@ import { useTheme } from '@/hooks/use-theme';
 /**
  * Water tab: logo + bell, then the three readings. Each card leads with its status in plain
  * words and turns amber/red when out of range. Cards are always shown; without a device or a
- * reading they show "—" and "No reading" (never made-up values).
+ * reading they show "—" and "No reading" (never made-up values). While loading, right after the
+ * station starts, or while the gas sensor warms up, a card pulses instead (MetricCard `wait`).
  */
 export default function WaterScreen() {
   const theme = useTheme();
@@ -55,6 +58,33 @@ export default function WaterScreen() {
   const temp = classify('temperatureC', reading?.temperatureC ?? null, limits.temperatureC);
   const nh3 = classify('nh3GasMv', reading?.nh3GasMv ?? null, limits.nh3GasMv);
 
+  /**
+   * Whether a card waits instead of showing a status (domain/warmup.ts): still loading, the
+   * station just started, or the gas sensor warming up - the same rule that holds the server's
+   * gas alerts, so the card never says "A bit high" while the alerts say nothing, or the reverse.
+   * Only while the station is live: a stopped station is not warming up.
+   */
+  function waitFor(metric: Metric, value: number | null): CardWait | null {
+    if (loading) return { kind: 'loading' };
+    if (!device || !reading || status !== 'live') return null;
+    if (warmingUp(metric, reading, device.readingIntervalSec)) {
+      const leftMs = Math.max(0, gasWarmupLeftMs(reading, device.readingIntervalSec) - Math.max(0, now - reading.serverTimeMs));
+      const min = Math.max(1, Math.ceil(leftMs / 60_000));
+      return {
+        kind: 'warming',
+        hasValue: value !== null,
+        progress: 1 - leftMs / GAS_SETTLE_MS,
+        text: value === null ? `Sensor heating up · ready in about ${min} min` : `Settling after power-on · ready in about ${min} min`,
+      };
+    }
+    if (value === null && isFirstReading(reading)) return { kind: 'starting' };
+    return null;
+  }
+  // The station reads a newly saved pH calibration within 10 minutes; until then say so.
+  const cal = device?.phCalibration;
+  const applyingCalibration = status === 'live' && cal?.status === 'calibrated' && cal.calibratedAtMs !== null
+    && now - cal.calibratedAtMs < CALIBRATION_PICKUP_MS;
+
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
       <StatusBar style="light" />
@@ -75,9 +105,8 @@ export default function WaterScreen() {
         <OfflineBanner />
         {/* The station's status lives in Settings. Here it appears only when it matters: an old
             reading must not look like the current water. */}
-        {loading ? (
-          <ActivityIndicator color={theme.tint} />
-        ) : !device ? (
+        {/* While loading, the cards themselves pulse (MetricCard `wait`). */}
+        {loading ? null : !device ? (
           <StatusPill status="no-data" label="No station connected" />
         ) : status !== 'live' ? (
           <View style={styles.statusRow}>
@@ -99,13 +128,18 @@ export default function WaterScreen() {
           status={ph}
           note={`Normal ${normalRangeText('ph', limits.ph)}`}
           dimmed={dimmed}
-          tags={[...(reading && !reading.phCalibrated ? [{ label: 'Uncalibrated', tone: 'warning' as const }] : []), ...sim]}>
+          wait={waitFor('ph', reading?.ph ?? null)}
+          tags={[
+            ...(applyingCalibration ? [{ label: 'Applying new calibration', tone: 'info' as const, pulse: true }]
+              : reading && !reading.phCalibrated ? [{ label: 'Uncalibrated', tone: 'warning' as const }] : []),
+            ...sim,
+          ]}>
           <ScaleBar
             value={reading?.ph ?? null}
             min={0}
             max={14}
             segments={[{ until: limits.ph.normal[0], color: theme.scaleAcid }, { until: limits.ph.normal[1], color: theme.scaleNeutral }, { until: 14, color: theme.scaleBase }]}
-            labels={['0 Acidic', '7 Neutral', 'Basic 14']}
+            labels={['0 Acidic', '7 Neutral', 'Alkaline 14']}
           />
         </MetricCard>
 
@@ -117,6 +151,7 @@ export default function WaterScreen() {
           status={temp}
           note={`Normal ${normalRangeText('temperatureC', limits.temperatureC)}`}
           dimmed={dimmed}
+          wait={waitFor('temperatureC', reading?.temperatureC ?? null)}
           tags={sim}>
           <ScaleBar
             value={reading?.temperatureC ?? null}
@@ -135,6 +170,7 @@ export default function WaterScreen() {
           status={nh3}
           note={`Air above the water · normal ${normalRangeText('nh3GasMv', limits.nh3GasMv)}`}
           dimmed={dimmed}
+          wait={waitFor('nh3GasMv', reading?.nh3GasMv ?? null)}
           tags={[{ label: 'Relative, not ppm', tone: 'info' }, ...sim]}
         />
       </ScrollView>

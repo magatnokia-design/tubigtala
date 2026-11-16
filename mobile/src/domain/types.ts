@@ -73,6 +73,11 @@ export interface Reading {
   id: string;
   /** Server receive time (ms). The clock all status logic uses. */
   serverTimeMs: number;
+  /**
+   * Readings since the station powered on (0 = the first after power-on; domain/warmup.ts).
+   * null when missing - also in readings cached by app versions before 0.9.5.
+   */
+  seq: number | null;
   /** ESP32 NTP time (ms), display only; null if the device clock was not synced. */
   deviceTimeMs: number | null;
   /** pH, 0-14 */

@@ -42,7 +42,7 @@ test('workbook has the required parts and only the chosen fields', () => {
   assert.ok(readings.includes('pH level status'));
   assert.ok(readings.includes('Ammonia gas (mV)'));
   assert.ok(!readings.includes('Temperature'), 'temperature was not selected');
-  assert.ok(readings.includes('Too high'));
+  assert.ok(readings.includes('Too alkaline'), 'pH 9.4 in the pH words');
   assert.ok(readings.includes('pH calibrated'), 'calibration flag column');
   assert.ok(readings.includes('No reading'), 'missing value is labelled, not zero');
   assert.ok(readings.includes('state="frozen"'));

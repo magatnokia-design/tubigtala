@@ -19,9 +19,10 @@ import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { endOfDay, formatRange, startOfDay, type DayRange } from '@/domain/dates';
 import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
 import { insight, insightSentence } from '@/domain/insights';
-import { STALE_AFTER_INTERVALS } from '@/domain/status';
+import { deviceStatus, STALE_AFTER_INTERVALS } from '@/domain/status';
 import { limitsOf } from '@/domain/limits';
-import { classify, METRIC_INFO, type Metric, type Range } from '@/domain/thresholds';
+import { classify, METRIC_INFO, type Metric, type Range, type Status } from '@/domain/thresholds';
+import { warmingUp } from '@/domain/warmup';
 import type { Reading } from '@/domain/types';
 import { useAppActive } from '@/hooks/use-app-active';
 import { useReadingsBetween } from '@/hooks/use-devices';
@@ -75,6 +76,11 @@ export default function AnalyticsScreen() {
   const loading = devices.status === 'loading' || (device !== null && history.status === 'loading');
   const loadError = devices.status === 'error' ? devices.message : device && history.status === 'error' ? history.message : null;
   const multiDay = mode === 'date' && range.end !== range.start;
+  // Live only, and only while the station is live: is its newest reading from the gas warm-up?
+  const newestReading = readings.length ? readings[readings.length - 1] : null;
+  const warmingNow = (metric: Metric) => mode === 'live' && device !== null && newestReading !== null
+    && deviceStatus(newestReading.serverTimeMs, device.readingIntervalSec, now) === 'live'
+    && warmingUp(metric, newestReading, device.readingIntervalSec);
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
@@ -149,7 +155,7 @@ export default function AnalyticsScreen() {
 
         {METRICS.map(({ metric, icon }) => (
           <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} intervalSec={device?.readingIntervalSec ?? 60}
-            limits={limitsOf(device)[metric]} />
+            limits={limitsOf(device)[metric]} warming={warmingNow(metric)} />
         ))}
       </ScrollView>
 
@@ -166,8 +172,10 @@ export default function AnalyticsScreen() {
 }
 
 /** `limits`: the station's alert limits for this sensor (limits.ts), for the status, the normal band and the insight. */
-function MetricChart({ metric, icon, readings, multiDay, intervalSec, limits }: {
+function MetricChart({ metric, icon, readings, multiDay, intervalSec, limits, warming }: {
   metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean; intervalSec: number; limits: Range;
+  /** the newest reading is from the gas sensor's warm-up (domain/warmup.ts): no status yet, as on the Water tab */
+  warming: boolean;
 }) {
   const theme = useTheme();
   const info = METRIC_INFO[metric];
@@ -175,7 +183,7 @@ function MetricChart({ metric, icon, readings, multiDay, intervalSec, limits }: 
   const ins = useMemo(() => insight(metric, points, limits), [metric, points, limits]);
   // The big number and its status are the newest reading, as on the Water tab. When that reading
   // has no value, show "—" and say when the last value was, rather than passing it off as current.
-  const status = classify(metric, ins.newest?.v ?? null, limits);
+  const status: Status = warming ? { level: 'unknown', label: 'Warming up' } : classify(metric, ins.newest?.v ?? null, limits);
   const showLastValid = ins.newest?.v === null && ins.latest !== null;
   const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
   const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;

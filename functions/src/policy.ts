@@ -82,7 +82,8 @@ const gsmSafe = (s: string) => s.replace(/[^A-Za-z0-9 .,:;()'!?#&+\-_/]/g, '').t
 
 /**
  * One SMS for all critical fields of one reading, within 160 GSM characters:
- * "TubigTala: Tank 1 pH TOO HIGH 9.4 (normal 6.5-8.5) at 3:42 PM"
+ * "TubigTala: Tank 1 pH 5.8 TOO ACIDIC (normal 6.5-8.5) at 3:42 PM" - the reading next to what
+ * was measured, then the status word (same words as the app, thresholds.ts).
  */
 export function smsText(deviceName: string, items: SmsItem[], atMs: number): string {
   const parts = items.map(({ metric, label, value, range }) => {
@@ -91,7 +92,7 @@ export function smsText(deviceName: string, items: SmsItem[], atMs: number): str
     const [lo, hi] = (range ?? RANGES[metric]).normal;
     // "20-32" normally; "-5 to 30" when a limit is below zero ("-5-30" would be unreadable).
     const span = lo < 0 ? `${lo} to ${hi}` : `${lo}-${hi}`;
-    return `${SMS_SUBJECT[metric]} ${label.toUpperCase()} ${formatNumber(value, decimals)}${unit} (normal ${span}${unit})`;
+    return `${SMS_SUBJECT[metric]} ${formatNumber(value, decimals)}${unit} ${label.toUpperCase()} (normal ${span}${unit})`;
   });
   return `TubigTala: ${gsmSafe(deviceName) || 'device'} ${parts.join('; ')} at ${manilaClock(atMs)}`;
 }

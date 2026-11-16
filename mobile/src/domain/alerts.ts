@@ -50,34 +50,56 @@ export function nextAlertStep(state: AlertState | null, next: Level, nowMs: numb
   return { kind: 'update', state: { level: next, alertLevel: state?.alertLevel ?? null, alertedAtMs: state?.alertedAtMs ?? null } };
 }
 
-// How each field is named in an alert: in the title ("Tank 2: water too hot") and at the
-// start of the body sentence ("Water is 36.2 °C."). Ammonia says "gas above the water"
-// because the MQ sensor measures air, not the water itself (CLAUDE.md).
+// How each field is named in an alert: in the title ("Tank 2: water too hot", "Tank 2: water
+// too acidic") and at the start of the body sentence ("Water is 36.2 °C.", "pH is 5.8.").
+// Ammonia says "gas above the water" because the MQ sensor measures air, not the water (CLAUDE.md).
 const SUBJECT: Record<Metric, { title: string; sentence: string }> = {
-  ph: { title: 'pH', sentence: 'pH' },
+  ph: { title: 'water', sentence: 'pH' },
   temperatureC: { title: 'water', sentence: 'Water' },
   nh3GasMv: { title: 'ammonia gas', sentence: 'Ammonia gas above the water' },
 };
 
 /**
- * What is wrong, without the station name - for the in-app list and details, where the station is
- * shown separately (only when there is more than one): "Water a bit warm", "pH too high".
+ * A reading with what it is: "pH 5.8", "36.2 °C", "1844 mV". pH has no unit, so it is named -
+ * a bare "5.8" did not say what was measured.
  */
-export function alertHeadline(metric: Metric, label: string): string {
-  const text = `${SUBJECT[metric].title} ${label.toLowerCase()}`;
-  return metric === 'ph' ? text : text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/** The reading and its normal range in one line: "33.4 °C · normal 20 to 32 °C". `range`: the limits it was checked against. */
-export function alertDetail(metric: Metric, value: number | null, range: Range = RANGES[metric]): string {
-  const info = METRIC_INFO[metric];
-  return `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''} · normal ${normalRangeText(metric, range)}`;
+export function valueText(metric: Metric, value: number | null): string {
+  const { unit, decimals } = METRIC_INFO[metric];
+  const n = formatNumber(value, decimals);
+  return metric === 'ph' ? `pH ${n}` : `${n}${unit ? ` ${unit}` : ''}`;
 }
 
 /**
- * Title and body of an alert, written so the title alone says what is wrong:
- * "Tank 1: pH too high" / "pH is 9.4. Normal is 6.5 to 8.5."
- * Caveats come last: uncalibrated pH (CLAUDE.md: never assume calibration) and simulated data.
+ * What is wrong, without the station name - for the in-app list and details, where the station is
+ * shown separately (only when there is more than one): "Water a bit warm", "Water too acidic".
+ */
+export function alertHeadline(metric: Metric, label: string): string {
+  const text = `${SUBJECT[metric].title} ${label.toLowerCase()}`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The reading and its normal range in one line: "pH 5.8 · normal 6.5 to 8.5". `range`: the limits it was checked against. */
+export function alertDetail(metric: Metric, value: number | null, range: Range = RANGES[metric]): string {
+  return `${valueText(metric, value)} · normal ${normalRangeText(metric, range)}`;
+}
+
+/**
+ * What an out-of-range pH can mean, for the alert's details: the effects the US EPA lists for its
+ * 6.5-8.5 drinking-water range, which is about taste and pipes, not a health limit - so this never
+ * says the water is unsafe (CLAUDE.md). null for normal values and for the other fields.
+ */
+export function alertMeaning(metric: Metric, value: number | null, range: Range = RANGES[metric]): string | null {
+  if (metric !== 'ph' || value === null) return null;
+  if (value < range.normal[0]) return 'Lower pH means more acidic. Acidic water can taste metallic and corrode pipes.';
+  if (value > range.normal[1]) return 'Higher pH means more alkaline. Alkaline water can taste like soda and leave mineral deposits.';
+  return null;
+}
+
+/**
+ * Title and body of an alert, written so the title alone - all a locked phone shows - says what
+ * is wrong and the reading: "Tank 1: water too acidic (pH 5.8)" / "pH is 5.8. Normal is 6.5 to
+ * 8.5. Lower pH means more acidic." Caveats come last: uncalibrated pH (CLAUDE.md: never assume
+ * calibration) and simulated data. Gas says it is relative.
  * `opts.range`: the station's limits for this sensor (limits.ts); the defaults when left out.
  */
 export function alertText(
@@ -86,13 +108,18 @@ export function alertText(
 ) {
   const info = METRIC_INFO[metric];
   const subject = SUBJECT[metric];
+  const range = opts.range ?? RANGES[metric];
   const shown = `${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
+  const hint = metric === 'ph' && value !== null
+    ? (value < range.normal[0] ? 'Lower pH means more acidic.' : value > range.normal[1] ? 'Higher pH means more alkaline.' : '')
+    : metric === 'nh3GasMv' ? 'A relative reading, not ppm.' : '';
   const notes = [
+    hint,
     opts.uncalibrated ? 'The pH sensor is not calibrated yet, so this may be off.' : '',
     opts.simulated ? 'Test data, not a real sensor.' : '',
   ].filter(Boolean);
   return {
-    title: `${deviceName}: ${subject.title} ${label.toLowerCase()}`,
-    body: [`${subject.sentence} is ${shown}.`, `Normal is ${normalRangeText(metric, opts.range ?? RANGES[metric])}.`, ...notes].join(' '),
+    title: `${deviceName}: ${subject.title} ${label.toLowerCase()} (${valueText(metric, value)})`,
+    body: [`${subject.sentence} is ${shown}.`, `Normal is ${normalRangeText(metric, range)}.`, ...notes].join(' '),
   };
 }
