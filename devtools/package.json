@@ -9,7 +9,8 @@
     "seed": "node seed.mjs",
     "simulate": "node simulate.mjs",
     "assign": "node assign.mjs",
-    "pair-code": "node pair-code.mjs"
+    "pair-code": "node pair-code.mjs",
+    "setup-sticker": "node setup-sticker.mjs"
   },
   "dependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",

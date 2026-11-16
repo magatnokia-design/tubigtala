@@ -1,9 +1,9 @@
-// TubigTala firmware (27 Oct 2026).
+// TubigTala firmware (27 Oct 2026; on tank-01 since 5 Nov 2026).
 // Reads the DS18B20, pH and MQ-137 sensors, validates each value against docs/data-model.md,
 // prints one JSON line per reading to serial (115200 baud) and uploads it to Firestore
-// (cloud.cpp) over Wi-Fi, queueing readings while offline. Serial commands (help, diag, read,
-// pins) help with wiring and bring-up.
-// Compiled only - never flashed or run on hardware yet.
+// (cloud.cpp) over Wi-Fi, queueing readings while offline. Wi-Fi, including setting it up from
+// a phone, is wifisetup.cpp. Serial commands (help, diag, read, pins, wifi, forget) help with
+// wiring and bring-up.
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -12,6 +12,7 @@
 #include "config.h"
 #include "cloud.h"
 #include "sampling.h"
+#include "wifisetup.h"
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
@@ -26,7 +27,6 @@ char bootId[9];  // random per boot; readingId = bootId-seq (duplicate-upload gu
 uint32_t seq = 0;
 uint32_t lastReadingMs = 0;
 bool firstReading = true;
-uint32_t lastWifiAttemptMs = 0;
 
 // NAN means "no valid reading" and is sent as null, never as 0.
 
@@ -156,15 +156,12 @@ void setup() {
   cloudBegin(bootId);  // loads the saved pH calibration from flash, so do it before printing it
   Serial.printf("TubigTala %s boot %s, DS18B20 count %d, pH %s\n", FIRMWARE_VERSION, bootId,
                 ds18b20.getDeviceCount(), cloudCalibration().calibrated ? "calibrated" : "UNCALIBRATED");
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  lastWifiAttemptMs = millis();
+  wifiBegin();  // the saved network, or secrets.h's, or the setup network if neither works
   configTzTime(TZ_INFO, NTP_SERVER_1, NTP_SERVER_2);  // syncs in the background once online
 #ifdef FIREBASE_EMULATOR_HOST
-  Serial.printf("Device %s, Wi-Fi \"%s\", uploading to EMULATOR at %s\n", DEVICE_ID, WIFI_SSID, FIREBASE_EMULATOR_HOST);
+  Serial.printf("Device %s, Wi-Fi \"%s\", uploading to EMULATOR at %s\n", DEVICE_ID, wifiNetworkName(), FIREBASE_EMULATOR_HOST);
 #else
-  Serial.printf("Device %s, Wi-Fi \"%s\", uploading to %s\n", DEVICE_ID, WIFI_SSID, FIREBASE_PROJECT_ID);
+  Serial.printf("Device %s, Wi-Fi \"%s\", uploading to %s\n", DEVICE_ID, wifiNetworkName(), FIREBASE_PROJECT_ID);
 #endif
   Serial.println("Type help for commands");
 }
@@ -187,11 +184,7 @@ void printPin(uint8_t pin, float dividerRatio) {
 
 void printDiag() {
   Serial.printf("--- diag: TubigTala %s, boot %s, up %lu s\n", FIRMWARE_VERSION, bootId, (unsigned long)(millis() / 1000));
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("Wi-Fi:  connected to \"%s\", signal %d dBm, IP %s\n", WIFI_SSID, WiFi.RSSI(), WiFi.localIP().toString().c_str());
-  } else {
-    Serial.printf("Wi-Fi:  NOT connected to \"%s\" (status %d)\n", WIFI_SSID, (int)WiFi.status());
-  }
+  wifiPrintStatus();
   time_t now = time(nullptr);
   if (now > VALID_EPOCH) {
     struct tm local;
@@ -241,7 +234,13 @@ void printDiag() {
 void handleCommand(const char* cmd) {
   if (strcmp(cmd, "help") == 0) {
     Serial.println("Commands: diag (status of Wi-Fi, clock, sensors), read (take a reading now),");
-    Serial.println("          pins (G34/G35 voltage every second for 30 s), stop (end pins)");
+    Serial.println("          pins (G34/G35 voltage every second for 30 s), stop (end pins),");
+    Serial.println("          wifi (open the Wi-Fi setup network, like holding BOOT 3 s),");
+    Serial.println("          forget (forget the Wi-Fi saved by the setup page)");
+  } else if (strcmp(cmd, "wifi") == 0) {
+    wifiOpenSetup();
+  } else if (strcmp(cmd, "forget") == 0) {
+    wifiForget();
   } else if (strcmp(cmd, "diag") == 0) {
     printDiag();
   } else if (strcmp(cmd, "read") == 0) {
@@ -290,14 +289,6 @@ void pollSerial() {
   }
 }
 
-void maintainWifi() {
-  if (WiFi.status() == WL_CONNECTED || millis() - lastWifiAttemptMs < WIFI_RETRY_MS) return;
-  lastWifiAttemptMs = millis();
-  Serial.println("[wifi] not connected, retrying");
-  WiFi.disconnect();
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-}
-
 void loop() {
   sampleSensors();
   if (firstReading || millis() - lastReadingMs >= READING_INTERVAL_MS) {
@@ -306,6 +297,6 @@ void loop() {
     takeReading();
   }
   pollSerial();
-  maintainWifi();
+  wifiLoop();
   cloudLoop();
 }

@@ -51,9 +51,20 @@ Copy-Item firmware\tubigtala\secrets.example.h firmware\tubigtala\secrets.h
 notepad firmware\tubigtala\secrets.h
 ```
 
-- `WIFI_SSID` / `WIFI_PASSWORD`: a **2.4 GHz** network (the ESP32 cannot see 5 GHz).
+- `WIFI_SSID` / `WIFI_PASSWORD`: **optional since firmware 0.4.0** - a **2.4 GHz** network (the ESP32 cannot see 5 GHz) to try first. Leave `WIFI_SSID` empty (`""`) for a station its owner will connect from a phone (step 6). A network chosen on the setup page is saved in the station and always wins over this one.
 - `FIREBASE_API_KEY`: Firebase console > Project settings > General > **Web API key**.
 - `DEVICE_ID`, `DEVICE_EMAIL`, `DEVICE_PASSWORD`: from steps 1 and 2.
+- `SETUP_AP_PASSWORD`: written by step 3b - don't type one by hand.
+
+## 3b. Wi-Fi setup sticker (firmware 0.4.0+)
+
+```powershell
+cd devtools; npm run setup-sticker -- tank-01 --write; cd ..
+```
+
+It makes a random 10-character password for the station's own **setup network** `TubigTala-Setup-tank-01`, writes it into `secrets.h` as `SETUP_AP_PASSWORD` (it refuses if `secrets.h` is for another station, and never prints the password), and writes the sticker `devtools\out\setup-wifi-tank-01.html` (git-ignored: it shows the password). Open it in a browser and print at 100% (5 x 1.5 in, the size of the other TubigTala stickers); its QR joins the setup network from a phone camera, and it also shows the network name and password for typing. Flash (step 4) **after** `--write`, so the station uses the new password. Without the `--write` flag it only remakes the sticker for the password already in `secrets.h`.
+
+Without `SETUP_AP_PASSWORD` the setup network is **open**, and the home Wi-Fi password typed on the setup page crosses the air unencrypted - make the sticker.
 
 `secrets.h` is git-ignored; never commit it. Check with `git status` before any commit.
 
@@ -82,7 +93,8 @@ arduino-cli monitor -p COM5 -c baudrate=115200
 Expected, in order:
 
 ```
-TubigTala 0.2.2 boot 1a2b3c4d, DS18B20 count 1, pH UNCALIBRATED
+TubigTala 0.4.0 boot 1a2b3c4d, DS18B20 count 1, pH UNCALIBRATED
+[wifi] connecting to "YourWifi" (from secrets.h)
 Device tank-01, Wi-Fi "YourWifi", uploading to tubigtala-64d9e
 Type help for commands
 READING {"bootId":"1a2b3c4d","seq":0,...}
@@ -102,6 +114,8 @@ Type into the monitor and press Enter (Arduino IDE Serial Monitor: set the line 
 | `diag` | One report: Wi-Fi (signal in dBm), clock, upload queue, pH calibration in use, DS18B20 (temperature, or why not), G34 and G35 (pin mV, board output mV, pH estimate). |
 | `read` | Takes a normal reading now (it is uploaded like any other) and restarts the 1-minute timer. |
 | `pins` | Prints G34 (pH) and G35 (gas) every second for 30 s. Use it while turning the pH board's trimmer. `stop` ends it early. |
+| `wifi` | Opens the Wi-Fi setup network now, like holding BOOT for 3 s (0.4.0+). |
+| `forget` | Forgets the network saved by the setup page; the station goes back to `secrets.h`'s, or opens setup if there is none (0.4.0+). |
 
 Example `diag` (values illustrative, not measured):
 
@@ -128,11 +142,37 @@ What the lines tell you:
 | G34 or G35 near 0 mV | Signal wire not connected, or the board has no power (V+/VCC -> V5, G/GND -> GND). |
 | Wi-Fi signal below about -80 dBm | Weak; uploads may fail. Move the board or the router closer. |
 
+## 6. Wi-Fi setup from a phone (firmware 0.4.0+)
+
+Anyone can connect the station to their own Wi-Fi - no PC, no re-flashing (`firmware/tubigtala/wifisetup.cpp`).
+
+**When the setup network opens** - `TubigTala-Setup-<station id>`, WPA2 with the sticker's password, and the board's blue LED blinks:
+- no network is known at all (nothing saved, `WIFI_SSID` empty);
+- the known network has not worked **since this start** for 1 minute - a new place, a changed password;
+- the **BOOT** button on the ESP32 board is held for 3 seconds (or serial `wifi`) - to change networks while online.
+
+A station that was online and then loses its router does **not** open it: it keeps retrying, so a router restart never needs a phone. While no phone is on the setup network, the station also retries the known network every minute and closes setup as soon as that works (unless it was opened with BOOT / `wifi`, which stays until used or 10 minutes unused).
+
+**Setting it up:**
+1. Scan the Wi-Fi setup sticker with the phone camera (or join `TubigTala-Setup-<id>` and type the sticker's password). The phone may warn that the network has no internet - stay on it.
+2. The setup page opens by itself (captive portal; otherwise open `http://192.168.4.1`). It lists nearby networks, strongest first.
+3. Pick the home network, type its password, **Connect**. The station tries it for up to 20 s and saves it **only if it connects**; the page then shows **Connected!** (or "wrong password" / "network not found") and the setup network closes 30 s later.
+4. Reconnect the phone to the usual Wi-Fi and pair in the app (step 2b) if not done yet.
+
+The saved network lives in the station's flash (NVS namespace `wifi`), in plain text like `secrets.h`. Readings keep uploading while setup is open if the station is online; otherwise they queue (up to 60).
+
+Tested on tank-01, 16 Nov 2026: BOOT held -> setup network on channel 11 with 7 networks listed; a phone joined by QR, a mistyped password showed "wrong password" after 20 s, the right one connected in 4 s, and the setup network closed 30 s later; uploads continued throughout.
+
 ## Troubleshooting
 
 | Serial says | Likely cause | Check |
 |---|---|---|
-| `[wifi] not connected, retrying` forever | Wrong SSID/password, 5 GHz network, out of range | `secrets.h`; move closer; use a 2.4 GHz network |
+| `[wifi] not connected, retrying` forever | Wrong SSID/password, 5 GHz network, out of range | Set the network from a phone (step 6); move closer; use a 2.4 GHz network |
+| No `TubigTala-Setup-…` network on the phone | Setup is not open: the station is online, or still within its first minute | Hold BOOT 3 s until the blue LED blinks (serial: `[wifi] … opening the setup network`) |
+| Setup page does not open by itself | The phone's captive-portal check did not run | Open `http://192.168.4.1` in the phone's browser while on the setup network |
+| Page: "wrong password" | Typo, or the network's password changed | Show password, type it again |
+| Page: "network not found" | Name typed wrong, the network is 5 GHz only, or too far | Pick it from the list; a 2.4 GHz network; move the station closer |
+| Page: "The station did not answer" | The phone left the setup network (it may hop to mobile data or another Wi-Fi) | Rejoin `TubigTala-Setup-…` and tap Connect again |
 | `sign-in failed (HTTP 400)` | Wrong `DEVICE_EMAIL`/`DEVICE_PASSWORD`, or Email/Password sign-in disabled | Step 1; Authentication > Sign-in method |
 | `sign-in failed (HTTP -1)` or upload `HTTP -1` | No internet, DNS, or TLS failure | Router internet; `google_roots.h` (Google root certs, valid to 2036) |
 | `rejected by rules` | `devices/tank-01` missing, `deviceUid` is not this account's UID, `simulated` not `false`, or a value outside the allowed range | Step 2 field by field; `firestore.rules` |

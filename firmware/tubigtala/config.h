@@ -2,7 +2,7 @@
 // Non-secret settings. Pins and divider ratios marked (unverified) are the plan in
 // docs/wiring.md, not measurements - update both when the hardware is checked.
 
-#define FIRMWARE_VERSION "0.3.3"
+#define FIRMWARE_VERSION "0.4.0"
 
 // Pins (ADC1 only - ADC2 is unusable while Wi-Fi is on)
 #define PIN_DS18B20 4   // (unverified) 4.7k pull-up to 3.3 V
@@ -70,6 +70,17 @@
 // ---- Cloud upload (cloud.cpp) ----
 #define FIREBASE_PROJECT_ID "tubigtala-64d9e"  // never Dagitab's project
 #define WIFI_RETRY_MS 10000UL
+
+// ---- Wi-Fi self-setup (wifisetup.cpp; docs/device-setup.md, "Wi-Fi setup") ----
+#define PIN_SETUP_BUTTON 0             // the DevKit's BOOT button (an ordinary input after start-up)
+#define PIN_STATUS_LED 2               // the DevKit's blue LED: blinks while the setup network is open
+#define SETUP_BUTTON_HOLD_MS 3000UL    // hold BOOT this long to open the setup network
+#define WIFI_SETUP_AFTER_MS 60000UL    // no connection at all since start for this long: open setup
+#define WIFI_SETUP_RETRY_MS 60000UL    // while no phone is on the setup network, retry the known Wi-Fi
+#define WIFI_SETUP_IDLE_MS 600000UL    // setup opened on purpose closes after 10 min unused (if online)
+#define WIFI_TEST_MS 20000UL           // the page waits this long for a new network to connect
+#define SETUP_DONE_LINGER_MS 30000UL   // after success the setup network stays this long, so the
+                                       // phone can rejoin (the channel may change) and read "Connected"
 // Clock (deviceTime is display-only; serverTime is what the app trusts)
 // By IP, not name (Google Public NTP, time.google.com): with a name, SNTP leaves a DNS lookup
 // pending, and the first HTTPS request's hostByName() clears the DNS cache, which runs SNTP's
