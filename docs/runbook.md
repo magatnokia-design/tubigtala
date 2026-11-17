@@ -87,7 +87,7 @@ cd functions; npm run test:e2e       # builds, starts auth+firestore+functions e
 ## Cloud Functions (alert backend)
 
 `functions\` holds the backend, region `asia-southeast1` (policy in `docs/data-model.md`, "Alert policy"). Exactly three functions:
-- `onReadingCreated` - for every uploaded reading: raises alerts, pushes them to the owner's phones (Firebase Cloud Messaging), sends SMS for critical ones, and tracks sensors that stop sending values.
+- `onReadingCreated` - for every uploaded reading: adds it to its hourly pack (`devices/{id}/hours`, since 0.9.7), raises alerts, pushes them to the owner's phones (Firebase Cloud Messaging), sends SMS for critical ones, and tracks sensors that stop sending values.
 - `checkStations` - every 5 minutes (one Cloud Scheduler job): station offline / back online.
 - `onPushTokenWritten` - when a phone registers for push: removes it from the account it was on before (a phone belongs to the account that registered it last).
 

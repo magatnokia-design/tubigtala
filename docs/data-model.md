@@ -14,6 +14,7 @@ users/{uid}/alertState/{deviceId}_offline    whether the station is offline (ser
 users/{uid}/pushTokens/{id}   one per phone with phone notifications on: { token, platform, appVersion, updatedAt } (since 16 Nov 2026)
 devices/{deviceId}                           one monitoring unit (ESP32 + probes)
 devices/{deviceId}/readings/{readingId}      one sample from that unit
+devices/{deviceId}/hours/{hourId}            that unit's readings packed per UTC hour (a copy, written by the backend; since 0.9.7)
 ```
 
 Server-only (written by Cloud Functions with firebase-admin; no app account can read or write them, tested in `devtools/rules.test.mjs`):
@@ -159,6 +160,15 @@ Clients cannot create or delete devices. They are provisioned by an admin with `
 
 Every reading field is required, but sensor values may be `null`. **`null` is not `0`.** A missing sensor is `null`; the app shows "—", never 0.
 
+### `devices/{deviceId}/hours/{hourId}` (since app 0.9.7)
+
+Hourly packs: every reading of one UTC hour in one document, so long periods load in few reads. Analytics By date (up to 31 days) and the Excel export read these: 24 documents a day, at most 744 a month, instead of up to 44,640 readings (the live-query limit is 10,000, and the free tier allows 50,000 reads a day). Analytics Live keeps reading the last hour's readings directly.
+
+- ID: the UTC hour, `yyyymmddhh` (e.g. `2026111708` = 17 Nov 2026, 4-5 PM in Manila); `start`: the hour's first moment (timestamp).
+- `r`: map of reading ID -> `[ms after start, ph, phCalibrated (1/0), temperatureC, nh3GasMv, seq]`; `null` = no value (never 0). Defined once in `mobile/src/domain/hours.ts` (`packReading` / `unpackHour`), used by the app and the server.
+- Written by `onReadingCreated` (`functions/src/hours.ts`) for every new reading: one merge write on the reading's own key, no read, so a retried run cannot duplicate it. The readings stay the record; packs are a copy and can be rebuilt from them (read all readings, group by UTC hour, merge each into its pack - done once on 17 Nov 2026 for the 785 readings that existed before the function: 18 packs).
+- Readable by the station's owner, like the readings; no client can write them (rules tested in `devtools/rules.test.mjs`).
+
 ## Device status (one rule, used everywhere)
 
 Based on the newest reading's `serverTime` compared to now, with `interval = readingIntervalSec`:
@@ -181,4 +191,5 @@ Enforced in `firestore.rules`, tested in `devtools/rules.test.mjs`.
 - A user can read a device, and its readings, only if they are its `ownerUid`.
 - Only the device's `deviceUid` can create readings, and only well-formed ones (types, ranges, `serverTime == request.time`, `simulated` matches the device).
 - Nobody can update or delete readings from a client.
+- The owner can read the station's hourly packs (`hours`); only the backend writes them.
 - Anything not listed is denied.

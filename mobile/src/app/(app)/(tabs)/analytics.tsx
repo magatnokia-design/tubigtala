@@ -9,6 +9,7 @@ import { CalendarModal } from '@/components/calendar';
 import { DeviceSwitcher } from '@/components/device-switcher';
 import { Icon } from '@/components/icon';
 import { LevelChip } from '@/components/level-chip';
+import { InsightsSheet } from '@/components/insights-sheet';
 import { LineChart } from '@/components/line-chart';
 import { Notice } from '@/components/notice';
 import { OfflineBanner } from '@/components/offline-banner';
@@ -19,6 +20,7 @@ import { HEADER_CURVE, headerOnTop, Radius, Spacing } from '@/constants/theme';
 import { endOfDay, formatRange, startOfDay, type DayRange } from '@/domain/dates';
 import { formatClock, formatDateTime, formatNumber } from '@/domain/format';
 import { insight, insightSentence } from '@/domain/insights';
+import { periodBadge, periodInsight } from '@/domain/period';
 import { deviceStatus, STALE_AFTER_INTERVALS } from '@/domain/status';
 import { limitsOf } from '@/domain/limits';
 import { classify, METRIC_INFO, type Metric, type Range, type Status } from '@/domain/thresholds';
@@ -27,6 +29,7 @@ import type { Reading } from '@/domain/types';
 import { useAppActive } from '@/hooks/use-app-active';
 import { useHoursBetween, useReadingsBetween } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
+import { useNotifications } from '@/hooks/use-profile';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
 import { HISTORY_LIMIT } from '@/services/devices';
@@ -82,6 +85,21 @@ export default function AnalyticsScreen() {
   const warmingNow = (metric: Metric) => mode === 'live' && device !== null && newestReading !== null
     && deviceStatus(newestReading.serverTimeMs, device.readingIntervalSec, now) === 'live'
     && warmingUp(metric, newestReading, device.readingIntervalSec);
+  // The period the cards describe (insights): the last hour, or the chosen days.
+  const period = useMemo(() => (mode === 'live'
+    ? { startMs: now - LIVE_WINDOW_MS, endMs: now, nowMs: now }
+    : { startMs: range.start, endMs: endOfDay(range.end), nowMs: now }), [mode, now, range]);
+  // Alerts per sensor in the period, from the bell list (the newest 100): "or more" when the
+  // period reaches back past the oldest one loaded.
+  const notifications = useNotifications();
+  const alertsFor = (metric: Metric) => {
+    if (notifications.status !== 'ready' || !device) return null;
+    const list = notifications.data;
+    const count = list.filter((n) => n.deviceId === device.id && n.metric === metric
+      && n.createdAtMs >= period.startMs && n.createdAtMs <= period.endMs).length;
+    const atLeast = list.length >= 100 && list[list.length - 1].createdAtMs > period.startMs;
+    return { count, atLeast };
+  };
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.background }]}>
@@ -155,8 +173,9 @@ export default function AnalyticsScreen() {
         )}
 
         {METRICS.map(({ metric, icon }) => (
-          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} multiDay={multiDay} intervalSec={device?.readingIntervalSec ?? 60}
-            limits={limitsOf(device)[metric]} warming={warmingNow(metric)} />
+          <MetricChart key={metric} metric={metric} icon={icon} readings={readings} mode={mode} multiDay={multiDay}
+            intervalSec={device?.readingIntervalSec ?? 60} limits={limitsOf(device)[metric]} warming={warmingNow(metric)}
+            period={period} periodLabel={mode === 'live' ? 'Last hour' : formatRange(range)} alerts={alertsFor(metric)} />
         ))}
       </ScrollView>
 
@@ -172,36 +191,58 @@ export default function AnalyticsScreen() {
   );
 }
 
-/** `limits`: the station's alert limits for this sensor (limits.ts), for the status, the normal band and the insight. */
-function MetricChart({ metric, icon, readings, multiDay, intervalSec, limits, warming }: {
-  metric: Metric; icon: AndroidSymbol; readings: Reading[]; multiDay: boolean; intervalSec: number; limits: Range;
+/**
+ * One sensor's card. `limits`: the station's alert limits for this sensor (limits.ts), for the
+ * status, the normal band and the insights. Tapping it opens the period's insights (InsightsSheet).
+ */
+function MetricChart({ metric, icon, readings, mode, multiDay, intervalSec, limits, warming, period: win, periodLabel, alerts }: {
+  metric: Metric; icon: AndroidSymbol; readings: Reading[]; mode: Mode; multiDay: boolean; intervalSec: number; limits: Range;
   /** the newest reading is from the gas sensor's warm-up (domain/warmup.ts): no status yet, as on the Water tab */
   warming: boolean;
+  /** the period shown: [start, end] and now (ms) */
+  period: { startMs: number; endMs: number; nowMs: number };
+  periodLabel: string;
+  alerts: { count: number; atLeast: boolean } | null;
 }) {
   const theme = useTheme();
   const info = METRIC_INFO[metric];
+  const [open, setOpen] = useState(false);
   const points = useMemo(() => readings.map((r) => ({ t: r.serverTimeMs, v: r[metric] })), [readings, metric]);
   const ins = useMemo(() => insight(metric, points, limits), [metric, points, limits]);
-  // The big number and its status are the newest reading, as on the Water tab. When that reading
-  // has no value, show "—" and say when the last value was, rather than passing it off as current.
+  const period = useMemo(
+    () => periodInsight(metric, readings, limits, { intervalSec, startMs: win.startMs, endMs: win.endMs, nowMs: win.nowMs }),
+    [metric, readings, limits, intervalSec, win.startMs, win.endMs, win.nowMs],
+  );
+  const dated = mode === 'date';
+  // Live: the big number and its status are the newest reading, as on the Water tab; a missing
+  // value shows "—" and when the last value was. By date: a past period has no "now", so the number
+  // is its average and the chip says how the whole period went - "Normal" there (the newest
+  // reading) read as if the too-hot spell had never happened (user, 17 Nov 2026).
   const status: Status = warming ? { level: 'unknown', label: 'Warming up' } : classify(metric, ins.newest?.v ?? null, limits);
-  const showLastValid = ins.newest?.v === null && ins.latest !== null;
+  const badge = periodBadge(period);
+  const showLastValid = !dated && ins.newest?.v === null && ins.latest !== null;
   const when = (t: number) => (multiDay ? formatDateTime(t) : formatClock(t));
   const fmt = (v: number) => `${formatNumber(v, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`;
+  const normalPct = period.shares.find((s) => s.key === 'normal')?.pct ?? 0;
 
-  // Simple card so three fit one screen: name, newest value and status on one row; the chart
-  // fills the rest; one quiet line underneath says how the period went. (High / low lines were
-  // removed in 0.9.3 at the user's request: the chart itself shows them.)
+  // Simple card so three fit one screen: name, value and status on one row; the chart fills the
+  // rest; one quiet line underneath. (High / low lines were removed in 0.9.3 at the user's request;
+  // the details live in the insights opened by tapping.)
   return (
-    <View style={[styles.card, { borderColor: theme.border }]}>
+    <Pressable
+      onPress={() => setOpen(true)}
+      accessibilityRole="button"
+      accessibilityLabel={`${info.name}: details and insights`}
+      style={({ pressed }) => [styles.card, { borderColor: theme.border, backgroundColor: pressed ? theme.backgroundElement : theme.background }]}>
       <View style={styles.cardTop}>
         <Icon name={icon} size={20} />
         <ThemedText type="smallBold" style={styles.cardTitle} numberOfLines={1}>{info.name}</ThemedText>
         <View style={styles.valueBox}>
-          <ThemedText style={styles.value}>{formatNumber(ins.newest?.v ?? null, info.decimals)}</ThemedText>
+          {dated && period.avg !== null && <ThemedText themeColor="textSecondary" style={styles.unit}>avg</ThemedText>}
+          <ThemedText style={styles.value}>{formatNumber(dated ? period.avg : ins.newest?.v ?? null, info.decimals)}</ThemedText>
           {info.unit ? <ThemedText themeColor="textSecondary" style={styles.unit}>{info.unit}</ThemedText> : null}
         </View>
-        <LevelChip level={status.level} label={status.label} compact />
+        {!dated && <LevelChip level={status.level} label={status.label} compact />}
       </View>
 
       {showLastValid && ins.latest && (
@@ -214,10 +255,19 @@ function MetricChart({ metric, icon, readings, multiDay, intervalSec, limits, wa
         // Same rule as the stale status (domain/status.ts): no reading for 3 intervals = a gap.
         gapMs={STALE_AFTER_INTERVALS * intervalSec * 1000} />
 
-      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.lineText}>
-        {insightSentence(metric, ins)}
-      </ThemedText>
-    </View>
+      <View style={styles.bottomRow}>
+        {dated && <LevelChip level={badge.level} label={badge.label} compact />}
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={[styles.lineText, styles.flex]}>
+          {dated ? (period.count ? `Normal ${normalPct}% of the time` : '') : insightSentence(metric, ins)}
+        </ThemedText>
+        <ThemedText type="smallBold" style={[styles.lineText, { color: theme.tint }]}>Details</ThemedText>
+        <Icon name="chevron_right" size={16} color="tint" />
+      </View>
+
+      {open && (
+        <InsightsSheet metric={metric} period={period} periodLabel={periodLabel} when={when} alerts={alerts} onClose={() => setOpen(false)} />
+      )}
+    </Pressable>
   );
 }
 
@@ -249,4 +299,6 @@ const styles = StyleSheet.create({
   value: { fontSize: 22, lineHeight: 28, fontWeight: 700 },
   unit: { fontSize: 13 },
   lineText: { fontSize: 12, lineHeight: 16 },
+  flex: { flex: 1 },
+  bottomRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
 });
