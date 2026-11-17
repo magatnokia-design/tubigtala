@@ -291,3 +291,27 @@ test('gas warm-up after a power-on: no gas alert for 30 minutes, then the normal
   // The other sensors were never held back.
   assert.equal((await alertsFor('e2e-warmup', 'temperatureC')).length, 0);
 });
+
+test('ammonia gas critical for 3 readings after the warm-up: one SMS in mV; warm-up readings never count', async () => {
+  // Like 17 Nov 2026 08:49: gas jumped to 2534-3329 mV long after power-on.
+  await addDevice('e2e-gas-sms', false);
+  // During the warm-up even "too high" readings add up to nothing...
+  await upload('e2e-gas-sms', [{ seq: 27, nh3GasMv: 3000 }, { seq: 28, nh3GasMv: 3000 }, { seq: 29, nh3GasMv: 3000 }]);
+  await sleep(3000);
+  assert.equal((await deliveries('e2e-gas-sms', 'sms')).length, 0, 'no SMS from warm-up readings');
+  // ...and the first readings after it must make their own streak of 3.
+  await upload('e2e-gas-sms', [{ seq: 30, nh3GasMv: 2534 }, { seq: 31, nh3GasMv: 3329 }]);
+  await sleep(3000);
+  assert.equal((await deliveries('e2e-gas-sms', 'sms')).length, 0, 'warm-up readings do not complete the streak');
+  await upload('e2e-gas-sms', [{ seq: 32, nh3GasMv: 3269 }]);
+  const sms = await until('gas SMS delivery', async () => {
+    const d = await deliveries('e2e-gas-sms', 'sms');
+    return d.length && d.every((x) => x.status !== 'sending') ? d : undefined;
+  });
+  assert.equal(sms.length, 1);
+  assert.equal(sms[0].status, 'sent');
+  assert.equal(sms[0].metric, 'nh3GasMv');
+  const alerts = await alertsFor('e2e-gas-sms', 'nh3GasMv');
+  assert.equal(alerts.length, 1, 'one critical alert for the episode');
+  assert.equal(alerts[0].title, 'e2e-gas-sms: ammonia gas too high (2534 mV)');
+});
