@@ -140,23 +140,33 @@ export async function devicePushToken(): Promise<string | null> {
 
 const tokenDoc = (uid: string, token: string) => doc(db, 'users', uid, 'pushTokens', pushTokenId(token));
 
+// This app session's last step: `${uid} ${token}` once registered, `${uid} -` once unregistered.
+// The app checks again every time it comes back to the foreground (hooks/use-push-registration),
+// so repeating the same step is skipped - no Firestore write, no function run each time.
+let lastStep: string | null = null;
+
 /** Registers this phone with the backend. False when this phone has no push address. */
 export async function registerPushToken(uid: string, token?: string | null): Promise<boolean> {
   const t = token ?? (await devicePushToken());
   if (!t) return false;
+  const step = `${uid} ${t}`;
+  if (lastStep === step) return true;
   await setDoc(tokenDoc(uid, t), {
     token: t,
     platform: 'android',
     appVersion: (Constants.expoConfig?.version ?? '').slice(0, 20),
     updatedAt: serverTimestamp(),
   });
+  lastStep = step;
   return true;
 }
 
 /** Stops alert notifications to this phone (sign-out, notifications switched off). */
 export async function unregisterPushToken(uid: string): Promise<void> {
+  if (lastStep === `${uid} -`) return;
   const t = await devicePushToken();
   if (t) await deleteDoc(tokenDoc(uid, t));
+  lastStep = `${uid} -`;
 }
 
 /** FCM can replace a phone's token at any time; calls back with the new one. */

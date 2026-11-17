@@ -21,7 +21,7 @@ import { STATION_NAME } from '@/domain/pairing';
 import { deviceStatus } from '@/domain/status';
 import { limitsOf } from '@/domain/limits';
 import { classify, normalRangeText, type Metric } from '@/domain/thresholds';
-import { GAS_SETTLE_MS, gasWarmupLeftMs, isFirstReading, warmingUp } from '@/domain/warmup';
+import { GAS_SETTLE_MS, gasWarmupLeftNowMs, isFirstReading, warmingUp, warmupMinutesLeft } from '@/domain/warmup';
 import { useLatestReading } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
 import { useNotifications } from '@/hooks/use-profile';
@@ -68,8 +68,8 @@ export default function WaterScreen() {
     if (loading) return { kind: 'loading' };
     if (!device || !reading || status !== 'live') return null;
     if (warmingUp(metric, reading, device.readingIntervalSec)) {
-      const leftMs = Math.max(0, gasWarmupLeftMs(reading, device.readingIntervalSec) - Math.max(0, now - reading.serverTimeMs));
-      const min = Math.max(1, Math.ceil(leftMs / 60_000));
+      const leftMs = gasWarmupLeftNowMs(reading, device.readingIntervalSec, now);
+      const min = warmupMinutesLeft(leftMs);
       return {
         kind: 'warming',
         hasValue: value !== null,

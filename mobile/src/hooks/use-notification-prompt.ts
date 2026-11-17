@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { useProfile } from '@/hooks/use-profile';
 import { getFlag, setFlag } from '@/services/local-flags';
-import { phoneNotificationsSupported, requestNotificationPermission } from '@/services/notifications';
+import { phoneNotificationsSupported, registerPushToken, requestNotificationPermission } from '@/services/notifications';
 import { updateProfile } from '@/services/profile';
 
 // Guards against the effect re-running (profile updates) while a request is already open.
@@ -25,7 +25,13 @@ export function useNotificationPrompt() {
       try {
         await setFlag('notificationPrompt', uid);
         const result = await requestNotificationPermission();
-        if (result === 'granted' && !pushEnabled) await updateProfile(uid, { pushEnabled: true });
+        if (result === 'granted') {
+          // Switching notifications on registers this phone (use-push-registration). If they were
+          // already on (an existing account on a fresh install), nothing would change - so register
+          // here, or the phone stays unregistered until the app is restarted (found 17 Nov 2026).
+          if (!pushEnabled) await updateProfile(uid, { pushEnabled: true });
+          else await registerPushToken(uid).catch(() => undefined);
+        }
       } finally {
         asking = false;
       }

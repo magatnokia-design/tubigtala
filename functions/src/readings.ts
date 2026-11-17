@@ -13,7 +13,7 @@
 //     (push only), tracked in the same alertState document (missingSince, missingAlertedAt).
 //     Station offline: stations.ts.
 //  5. The gas sensor warming up after a power-on (domain/warmup.ts): its values are skipped -
-//     no alert, no "not reading" - for its first 15 minutes, as the Water card shows it.
+//     no alert, no "not reading" - for its first 30 minutes, as the Water card shows it.
 // No email (dropped 13 Nov 2026): alerts reach the user as in-app/phone notifications and SMS.
 // Deliveries are recorded in alertDeliveries/{id}, created before sending: a second run for the
 // same reading or episode finds the record and sends nothing. The app cannot read these records.
