@@ -266,11 +266,13 @@ test("the station's own alert limits: alert text, stored limits and SMS follow t
   assert.deepEqual(bad[0].limits, { normalMin: 20, normalMax: 32, criticalBelow: 15, criticalAbove: 35 });
 });
 
-test('gas warm-up after a power-on: no gas alert for 15 minutes, then the normal rules', async () => {
-  // Like tank-01 on 16 Nov 2026: no gas value for 3 minutes, then high values that drift down.
+test('gas warm-up after a power-on: no gas alert for 30 minutes, then the normal rules', async () => {
+  // Like tank-01 on 17 Nov 2026 after 13 hours off: no gas value for 3 minutes, then high values
+  // that drift down - still 1746 mV at 15 minutes, which 0.9.5's 15-minute warm-up let through.
   await addDevice('e2e-warmup', false);
   await upload('e2e-warmup', [
-    { seq: 0, nh3GasMv: null }, { seq: 1, nh3GasMv: null }, { seq: 4, nh3GasMv: 1844 }, { seq: 10, nh3GasMv: 2400 },
+    { seq: 0, nh3GasMv: null }, { seq: 1, nh3GasMv: null }, { seq: 4, nh3GasMv: 2552 }, { seq: 10, nh3GasMv: 2400 },
+    { seq: 15, nh3GasMv: 1746 }, { seq: 29, nh3GasMv: 1720 },
   ]);
   await sleep(3000);
   assert.equal((await alertsFor('e2e-warmup', 'nh3GasMv')).length, 0, 'warming up: no "a bit high", not even "too high"');
@@ -278,8 +280,8 @@ test('gas warm-up after a power-on: no gas alert for 15 minutes, then the normal
   const state = (await db.doc(`users/${uid}/alertState/e2e-warmup_nh3GasMv`).get()).data();
   assert.equal(state?.missingSince, undefined, 'no missing-value run started by warm-up nulls');
 
-  // 15 minutes after power-on the sensor counts again.
-  await upload('e2e-warmup', [{ seq: 15, nh3GasMv: 1844 }]);
+  // 30 minutes after power-on the sensor counts again.
+  await upload('e2e-warmup', [{ seq: 30, nh3GasMv: 1844 }]);
   const alerts = await until('gas alert after warm-up', async () => {
     const a = await alertsFor('e2e-warmup', 'nh3GasMv');
     return a.length ? a : undefined;

@@ -3,18 +3,24 @@
 // had been on.
 //
 // The MQ-137 gas sensor's heater needs time. The firmware sends no gas value for its first
-// 3 minutes (NH3_WARMUP_MS); the values then start high and drift down. Measured on tank-01,
-// 16 Nov 2026: after a power-on 1844 mV at 4 minutes, back under 1700 by 12 minutes; after a short
-// restart (sensor still warm) normal straight away. So for GAS_SETTLE_MS after power-on a gas
-// value says nothing yet: the Water card shows "Warming up" and the server raises no gas alert -
-// one rule, used by both (functions/src/readings.ts).
+// 3 minutes (NH3_WARMUP_MS); the values then start high and drift down, for longer the longer the
+// station was off. Measured on tank-01 (normal = up to 1700 mV):
+//   off ~8 minutes (16 Nov):  1844 mV at 4 min, under 1700 by 12 min
+//   off 13 hours   (17 Nov):  2552 mV at 4 min, 1746 at 15 min, ~1700 by about 20 min
+//   off 6 days     (13 Nov):  2491 mV at 3 min, 1730 at 28 min, under 1700 at 48 min
+// A short restart (sensor still warm) is normal straight away. So for GAS_SETTLE_MS after power-on
+// a gas value says nothing yet: the Water card shows "Warming up" and the server raises no gas
+// alert - one rule, used by both (functions/src/readings.ts). 15 minutes (0.9.5) was too short:
+// the 13-hour case raised "a bit high (1746 mV)" the minute it ended. 30 minutes (0.9.6, decided
+// 17 Nov 2026) covers restarts and overnight power-offs; after several days off one "a bit high"
+// warning can still follow (gas never sends SMS). Longer would also hide a real rise for longer.
 //
 // The first reading after power-on can also lack a value (the temperature at 18:19 that day):
 // the card shows "Starting up" rather than "No reading". Simulated devices (devtools) have no
 // heater, so they never warm up. Like thresholds.ts this file is compiled into the functions.
 import type { Metric } from './thresholds.ts';
 
-export const GAS_SETTLE_MS = 15 * 60_000;
+export const GAS_SETTLE_MS = 30 * 60_000;
 
 export interface WarmupReading {
   /** readings since power-on (0 = the first); null when unknown (e.g. cached by an older app) */
