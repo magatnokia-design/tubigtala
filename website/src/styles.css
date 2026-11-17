@@ -143,7 +143,10 @@ h1 { font-size: clamp(36px, 6vw, 56px); letter-spacing: -0.02em; }
 .phone-screen img { display: block; width: 100%; height: auto; }
 .phone figcaption, figcaption { text-align: center; font-size: 12px; opacity: 0.75; margin-top: var(--space-2); }
 
-.shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); margin-top: var(--space-5); }
+/* Eight screens (app 0.9.7): two full rows of four on wide screens, two columns on tablets, and on
+   phones one row that scrolls sideways (below). */
+.shots { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); margin-top: var(--space-5); }
+@media (max-width: 1000px) and (min-width: 761px) { .shots { grid-template-columns: repeat(2, 1fr); } }
 .shots .phone { width: 100%; max-width: 270px; }
 .shots .phone-screen { border-width: 8px; border-radius: 30px; box-shadow: var(--shadow); }
 .shots figcaption { font-size: 14px; opacity: 0.85; margin-top: var(--space-3); }

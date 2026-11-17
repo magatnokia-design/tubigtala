@@ -34,14 +34,21 @@ export const features = [
 ];
 
 /**
- * Real screenshots of the app (website/public/screens, 720 x 1536): the phone's status bar
- * cropped off, personal details blurred (Settings). Taken 16 Nov 2026 with app 0.9.2 - retake
- * Analytics with 0.9.3+ (no high / low lines since then).
+ * Real screenshots of the app (website/public/screens, 720 x 1456): the phone's status bar and
+ * Android's navigation bar cropped off, personal details blurred (Settings: name, email, phone
+ * number, avatar initials). Taken 17 Nov 2026 on the user's phone with app 0.9.7, processed with
+ * the same treatment as the 16 Nov set (crop, light sharpen). The Export shot shows its button
+ * running under the navigation bar - an app bug; retake it once that is fixed.
  */
 export const screens = [
-  { src: '/screens/water.jpg', caption: 'Live readings in plain words', alt: 'TubigTala Water screen: pH 6.9, temperature 25.0 °C and ammonia gas 1619 mV, each marked Normal on a coloured scale' },
-  { src: '/screens/analytics.jpg', caption: 'Charts for the last hour, any day or a week', alt: 'TubigTala Analytics screen: last-hour charts of pH, temperature and ammonia gas' },
-  { src: '/screens/settings.jpg', caption: 'SMS and phone alerts, your station, pH calibration', alt: 'TubigTala Settings screen: SMS alerts, the TubigTala Station shown Live, pH calibration and phone notifications (personal details blurred)' },
+  { src: '/screens/water.jpg', caption: 'Live readings in plain words', alt: 'TubigTala Water screen: pH 6.8, temperature 27.8 °C and ammonia gas 1572 mV, each marked Normal on a coloured scale' },
+  { src: '/screens/analytics.jpg', caption: 'Charts and insights for each sensor', alt: 'TubigTala Analytics, Live: last-hour charts of pH, temperature and ammonia gas, each with a summary line and Details' },
+  { src: '/screens/calendar.jpg', caption: 'Any day, a range or a whole month', alt: 'TubigTala date picker with Today, One day, Range and Month, the whole of November 2026 selected' },
+  { src: '/screens/notifications.jpg', caption: 'Every alert with its reading', alt: 'TubigTala Notifications: water a bit warm, station offline and back online, ammonia gas too high and a bit high, each with its reading' },
+  { src: '/screens/alert-limits.jpg', caption: 'Your own alert limits', alt: 'TubigTala Alert limits: normal and critical limits for pH and temperature, with a coloured bar and the newest reading' },
+  { src: '/screens/calibrate-ph.jpg', caption: 'pH calibration, step by step', alt: 'TubigTala Calibrate pH: put the probe in pH 7.00 buffer, live voltage 2,611 mV, settling' },
+  { src: '/screens/settings.jpg', caption: 'SMS, notifications and your station', alt: 'TubigTala Settings: SMS alerts, phone notifications, the TubigTala Station shown Live, pH calibration and alert limits (personal details blurred)' },
+  { src: '/screens/export.jpg', caption: 'Excel export, up to a month', alt: 'TubigTala Export to Excel: choose pH, temperature and ammonia gas and the dates, up to 31 days per file' },
 ] as const;
 
 /**

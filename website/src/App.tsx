@@ -35,7 +35,7 @@ function Screenshot({ shot, caption, lazy = true }: { shot: (typeof screens)[num
   return (
     <figure className="phone">
       <div className="phone-screen">
-        <img src={shot.src} alt={shot.alt} width={720} height={1536} loading={lazy ? 'lazy' : 'eager'} decoding="async" />
+        <img src={shot.src} alt={shot.alt} width={720} height={1456} loading={lazy ? 'lazy' : 'eager'} decoding="async" />
       </div>
       <figcaption>{caption}</figcaption>
     </figure>
