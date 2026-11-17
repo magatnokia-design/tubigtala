@@ -356,3 +356,23 @@ test('pushTokenOwners is closed to every app account: nobody can claim or read a
   await assertFails(setDoc(doc(as('stranger'), 'pushTokenOwners/abc123'), { uid: 'stranger' }));
   await assertFails(deleteDoc(doc(as('owner'), 'pushTokenOwners/abc123')));
 });
+
+// --- devices/{id}/hours (hourly packs, written by the backend only) ---
+const hourDoc = (device = DEVICE) => `devices/${device}/hours/2026111708`;
+const pack = () => ({ start: Timestamp.fromMillis(Date.UTC(2026, 10, 17, 8)), r: { 'abcd1234-5': [1000, 7.1, 1, 27.3, 1400, 5] } });
+
+test('hourly packs: the owner can read and list them, nobody else', async () => {
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), hourDoc()), pack()));
+  await assertSucceeds(getDoc(doc(as('owner'), hourDoc())));
+  await assertSucceeds(getDocs(query(collection(as('owner'), `devices/${DEVICE}/hours`), where('start', '>=', Timestamp.fromMillis(0)))));
+  await assertFails(getDoc(doc(as('stranger'), hourDoc())));
+  await assertFails(getDocs(collection(as('stranger'), `devices/${DEVICE}/hours`)));
+  await assertFails(getDoc(doc(as(null), hourDoc())));
+});
+test('hourly packs: no client can write them, not even the owner or the station', async () => {
+  await assertFails(setDoc(doc(as('owner'), hourDoc()), pack()));
+  await assertFails(setDoc(doc(as('board'), hourDoc()), pack()));
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), hourDoc()), pack()));
+  await assertFails(updateDoc(doc(as('owner'), hourDoc()), { 'r.fake-1': [0, 7, 1, 20, 1000, 1] }));
+  await assertFails(deleteDoc(doc(as('owner'), hourDoc())));
+});

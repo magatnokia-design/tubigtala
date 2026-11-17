@@ -215,10 +215,20 @@ service cloud.firestore {
 
         // Create only: re-sending the same reading hits the same ID and is rejected,
         // which is the duplicate-upload guard. No updates or deletes from clients.
+        // (The hourly packs below are copies of these, written by the backend.)
         allow create: if signedIn()
           && device().deviceUid == request.auth.uid
           && validReading(request.resource.data)
           && request.resource.data.simulated == device().simulated;
+      }
+
+      // Hourly packs: every reading of one UTC hour in one document (mobile/src/domain/hours.ts),
+      // written by the backend for each new reading (functions/src/hours.ts). The app reads them for
+      // long periods (By date up to 31 days, exports): 744 reads a month instead of up to 44,640.
+      // Readable like the readings - by the station's owner - and written by no client.
+      match /hours/{hourId} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/devices/$(deviceId)).data.ownerUid == request.auth.uid;
       }
     }
   }

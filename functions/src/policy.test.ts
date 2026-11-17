@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   isCriticalStreak, manilaClock, manilaKeys, maskPhone, reserveSms, smsMetricAllowed, smsText,
-  SMS_DAY_CAP, SMS_MONTH_CAP,
+  SMS_DAY_CAP, SMS_MAX_CHARS, SMS_MONTH_CAP,
 } from './policy.ts';
 
 // 4 Nov 2026, 15:42 in Manila = 07:42 UTC
@@ -16,11 +16,12 @@ test('day and month follow Philippine time, not UTC', () => {
   assert.deepEqual(manilaKeys(Date.UTC(2026, 10, 30, 17)), { day: '2026-12-01', month: '2026-12' });
 });
 
-test('SMS only for temperature and calibrated pH, never ammonia gas', () => {
+test('SMS for temperature, ammonia gas and calibrated pH', () => {
   assert.equal(smsMetricAllowed('temperatureC', false), true);
   assert.equal(smsMetricAllowed('ph', true), true);
   assert.equal(smsMetricAllowed('ph', false), false);
-  assert.equal(smsMetricAllowed('nh3GasMv', true), false);
+  assert.equal(smsMetricAllowed('nh3GasMv', true), true, 'since 0.9.7');
+  assert.equal(smsMetricAllowed('nh3GasMv', false), true, 'gas does not depend on the pH calibration');
 });
 
 test('streak needs 3 critical readings in a row; missing or milder values break it', () => {
@@ -72,4 +73,35 @@ test("the station's own limits decide the streak and the SMS text", () => {
   const ph = { normal: [6.8, 8.2] as [number, number], warning: [6.5, 8.5] as [number, number] };
   const long = smsText('x'.repeat(40), [{ metric: 'ph', label: 'Too alkaline', value: 13.9, range: ph }, { metric: 'temperatureC', label: 'Too cold', value: -9.9, range: cold }], T);
   assert.ok(long.length <= 160, `${long.length} chars`);
+});
+
+test('ammonia gas SMS: mV, high side only, and three critical fields still fit one SMS', () => {
+  // The 17 Nov 2026 08:49 reading, had gas SMS existed then.
+  assert.equal(smsText('TubigTala Station', [{ metric: 'nh3GasMv', label: 'Too high', value: 2534 }], T),
+    'TubigTala: TubigTala Station ammonia gas 2534 mV TOO HIGH (normal up to 1700 mV) at 3:42 PM');
+  const own = { normal: [0, 1500] as [number, number], warning: [0, 2000] as [number, number] };
+  assert.match(smsText('Tank 1', [{ metric: 'nh3GasMv', label: 'Too high', value: 2100, range: own }], T), /\(normal up to 1500 mV\)/);
+  // All three critical at once: the ranges go (they are in the app), the readings stay.
+  const three = smsText('TubigTala Station', [
+    { metric: 'ph', label: 'Too alkaline', value: 13.9 },
+    { metric: 'temperatureC', label: 'Too cold', value: -9.9 },
+    { metric: 'nh3GasMv', label: 'Too high', value: 5500 },
+  ], T);
+  assert.ok(three.length <= SMS_MAX_CHARS, `${three.length} chars: ${three}`);
+  assert.equal(three, 'TubigTala: TubigTala Station pH 13.9 TOO ALKALINE; water -9.9 C TOO COLD; ammonia gas 5500 mV TOO HIGH at 3:42 PM');
+  // Worst case: a 40-character name too - the name is shortened last.
+  const worst = smsText('x'.repeat(40), [
+    { metric: 'ph', label: 'Too alkaline', value: 13.9 },
+    { metric: 'temperatureC', label: 'Too cold', value: -9.9 },
+    { metric: 'nh3GasMv', label: 'Too high', value: 5500 },
+  ], T);
+  assert.ok(worst.length <= SMS_MAX_CHARS, `${worst.length} chars`);
+  assert.match(worst, /ammonia gas 5500 mV TOO HIGH at 3:42 PM$/);
+  assert.match(worst, /^[A-Za-z0-9 .,:;()'!?#&+\-_/]+$/, 'only GSM-safe characters');
+});
+
+test('a gas reading from the warm-up breaks the SMS streak', () => {
+  // readings.ts passes null for a warm-up reading (domain/warmup.ts)
+  assert.equal(isCriticalStreak('nh3GasMv', [2534, 3329, 3269]), true);
+  assert.equal(isCriticalStreak('nh3GasMv', [2534, null, 3269]), false);
 });

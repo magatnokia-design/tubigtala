@@ -2,8 +2,11 @@
 // midnight timestamp (ms); ranges are [start of first day, end of last day].
 
 export const DAY_MS = 86_400_000;
-/** Longest range one chart or export may cover (Firestore free-tier reads; docs/runbook.md). */
-export const MAX_RANGE_DAYS = 7;
+/**
+ * Longest range one chart or export may cover: a month (was 7 days until app 0.9.7). Long ranges
+ * read the hourly packs (domain/hours.ts): 31 days = 744 reads instead of up to 44,640 readings.
+ */
+export const MAX_RANGE_DAYS = 31;
 /**
  * First day that can be picked. Real readings started in November 2026 (the first station went
  * live on 5 Nov), so earlier days would only ever be empty. Local midnight, 1 Nov 2026.
@@ -15,11 +18,25 @@ export function isSelectableDay(day: number, today: number): boolean {
   return day >= DATA_START_DAY && day <= today;
 }
 
-/** How the calendar shows a selection: today alone, another single day, or a range. */
-export type PickMode = 'today' | 'day' | 'range';
+/** How the calendar shows a selection: today alone, another single day, a range, or a whole month. */
+export type PickMode = 'today' | 'day' | 'range' | 'month';
+
+/**
+ * A whole month as a range: its first day (or DATA_START_DAY, if later) to its last day (or
+ * today, if earlier) - 28 to 31 days depending on the month.
+ */
+export function monthRange(year: number, month: number, today: number): DayRange {
+  const first = new Date(year, month, 1).getTime();
+  const last = new Date(year, month + 1, 0).getTime();
+  return { start: Math.max(first, DATA_START_DAY), end: Math.min(last, today) };
+}
 
 export function pickModeOf(r: DayRange, today: number): PickMode {
-  if (r.start !== r.end) return 'range';
+  if (r.start !== r.end) {
+    const d = new Date(r.start);
+    const m = monthRange(d.getFullYear(), d.getMonth(), today);
+    return m.start === r.start && m.end === r.end ? 'month' : 'range';
+  }
   return r.start === today ? 'today' : 'day';
 }
 

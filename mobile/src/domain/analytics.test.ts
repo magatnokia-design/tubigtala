@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { addDays, DATA_START_DAY, daysInRange, endOfDay, isSelectableDay, lastPickableEnd, monthGrid, pickModeOf, startOfDay } from './dates.ts';
+import { addDays, DATA_START_DAY, daysInRange, endOfDay, isSelectableDay, lastPickableEnd, monthGrid, monthRange, pickModeOf, startOfDay } from './dates.ts';
 import { insight, insightSentence } from './insights.ts';
 import { classify, isEscalation, normalRangeText } from './thresholds.ts';
 
@@ -100,5 +100,21 @@ test('calendar: mode of a selection, and how far a range may reach', () => {
   assert.equal(pickModeOf({ start: addDays(today, -2), end: addDays(today, -2) }, today), 'day');
   assert.equal(pickModeOf({ start: addDays(today, -2), end: today }, today), 'range');
   assert.equal(lastPickableEnd(new Date(2026, 10, 1).getTime(), today), today, 'capped at today');
-  assert.equal(lastPickableEnd(new Date(2026, 10, 1).getTime(), new Date(2026, 10, 20).getTime()), new Date(2026, 10, 7).getTime(), '7 days');
+  assert.equal(lastPickableEnd(new Date(2026, 10, 1).getTime(), new Date(2026, 11, 20).getTime()), new Date(2026, 11, 1).getTime(), '31 days (a month) since 0.9.7');
+});
+
+test('a whole month: 28-31 days, from the first day with data, never past today', () => {
+  const dec20 = new Date(2026, 11, 20).getTime();
+  // November 2026: data starts on the 1st, so the whole month = 30 days.
+  assert.deepEqual(monthRange(2026, 10, dec20), { start: new Date(2026, 10, 1).getTime(), end: new Date(2026, 10, 30).getTime() });
+  assert.equal(daysInRange(new Date(2026, 10, 1).getTime(), new Date(2026, 10, 30).getTime()), 30);
+  // The current month stops at today.
+  assert.deepEqual(monthRange(2026, 11, dec20), { start: new Date(2026, 11, 1).getTime(), end: dec20 });
+  // February has 28 days in 2027; January 31.
+  const later = new Date(2027, 5, 1).getTime();
+  assert.equal(daysInRange(monthRange(2027, 1, later).start, monthRange(2027, 1, later).end), 28);
+  assert.equal(daysInRange(monthRange(2027, 0, later).start, monthRange(2027, 0, later).end), 31);
+  // The calendar recognises a whole month as its own mode.
+  assert.equal(pickModeOf(monthRange(2026, 10, dec20), dec20), 'month');
+  assert.equal(pickModeOf({ start: new Date(2026, 10, 2).getTime(), end: new Date(2026, 10, 30).getTime() }, dec20), 'range');
 });

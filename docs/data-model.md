@@ -14,6 +14,7 @@ users/{uid}/alertState/{deviceId}_offline    whether the station is offline (ser
 users/{uid}/pushTokens/{id}   one per phone with phone notifications on: { token, platform, appVersion, updatedAt } (since 16 Nov 2026)
 devices/{deviceId}                           one monitoring unit (ESP32 + probes)
 devices/{deviceId}/readings/{readingId}      one sample from that unit
+devices/{deviceId}/hours/{hourId}            that unit's readings packed per UTC hour (a copy, written by the backend; since 0.9.7)
 ```
 
 Server-only (written by Cloud Functions with firebase-admin; no app account can read or write them, tested in `devtools/rules.test.mjs`):
@@ -108,13 +109,14 @@ pH 6.5–8.5 is the usual drinking-water guideline range. Temperature has no saf
 
 ### Alert policy: phone notifications and SMS
 
-Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/`, tested on the emulator; Blaze enabled 16 Nov 2026.** Deployed, SMS goes out through TextBee (secrets `TEXTBEE_API_KEY` / `TEXTBEE_DEVICE_ID`) - first real SMS delivered 16 Nov 2026 15:33 - and phone notifications go out through **Firebase Cloud Messaging** straight from the function (decided 16 Nov 2026 instead of the Expo push service: no extra account or key) to the phones in `users/{uid}/pushTokens`, one push per alert, so they arrive while the app is closed (first one delivered 16 Nov 2026 16:25 with the app closed, 2 s after the reading; the SMS followed on the 3rd hot reading); the app no longer shows its own pop-up for alerts (it would show each twice). In the emulator both are only logged. Station health alerts (sensor not reading, offline, back online - see the notifications section) were added 16 Nov 2026: push only. Not built yet: the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, against the station's alert limits (`domain/limits.ts`; the defaults unless the owner set its own); since app 0.9.4 it is the only thing that raises alerts. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical pH and temperature only.
+Decided 4 Nov 2026; **email dropped 13 Nov 2026** (the user chose phone notifications + SMS only; no Brevo, no sender domain needed). **Built for reading alerts in `functions/`, tested on the emulator; Blaze enabled 16 Nov 2026.** Deployed, SMS goes out through TextBee (secrets `TEXTBEE_API_KEY` / `TEXTBEE_DEVICE_ID`) - first real SMS delivered 16 Nov 2026 15:33 - and phone notifications go out through **Firebase Cloud Messaging** straight from the function (decided 16 Nov 2026 instead of the Expo push service: no extra account or key) to the phones in `users/{uid}/pushTokens`, one push per alert, so they arrive while the app is closed (first one delivered 16 Nov 2026 16:25 with the app closed, 2 s after the reading; the SMS followed on the 3rd hot reading); the app no longer shows its own pop-up for alerts (it would show each twice). In the emulator both are only logged. Station health alerts (sensor not reading, offline, back online - see the notifications section) were added 16 Nov 2026: push only. Not built yet: the "SMS limit reached" notice in the app. The board never sends alerts; the function `onReadingCreated` evaluates each uploaded reading with the app's own `domain/thresholds.ts` and `domain/alerts.ts`, against the station's alert limits (`domain/limits.ts`; the defaults unless the owner set its own); since app 0.9.4 it is the only thing that raises alerts. An SMS "episode" is one critical alert: the SMS goes out on the 3rd critical reading in a row and not again until a new critical alert is raised (after recovery and the 30-minute cooldown). Simulated devices never get SMS. SMS is scarce (TextBee plan: 300/month), so it is kept for critical readings: temperature, calibrated pH and - since 0.9.7 (17 Nov 2026) - ammonia gas, whose warm-up readings after a power-on never count towards the 3 in a row. If all three are critical at once, the SMS leaves out the normal ranges so it still fits one 160-character text.
 
 | Event | Push | SMS |
 |---|---|---|
 | pH or temperature warning | yes | no |
 | pH or temperature critical | yes | yes, after 3 critical readings in a row; pH only when calibrated |
-| Ammonia gas warning or critical | yes | no (relative reading, not ppm - SMS kept for pH and temperature) |
+| Ammonia gas warning | yes | no |
+| Ammonia gas critical (above its critical limit, 3 readings in a row after the 30-minute warm-up) | yes | yes, since 0.9.7 (17 Nov 2026): "ammonia gas 2534 mV TOO HIGH (normal up to 1700 mV)" - in mV, never ppm |
 | A sensor sends no value for 10 min (gas: after warm-up) | yes | no |
 | Device offline (no reading for 15 min - the app's Offline rule) / back online | yes | no |
 | SMS monthly limit reached | yes | no |
@@ -158,6 +160,15 @@ Clients cannot create or delete devices. They are provisioned by an admin with `
 
 Every reading field is required, but sensor values may be `null`. **`null` is not `0`.** A missing sensor is `null`; the app shows "—", never 0.
 
+### `devices/{deviceId}/hours/{hourId}` (since app 0.9.7)
+
+Hourly packs: every reading of one UTC hour in one document, so long periods load in few reads. Analytics By date (up to 31 days) and the Excel export read these: 24 documents a day, at most 744 a month, instead of up to 44,640 readings (the live-query limit is 10,000, and the free tier allows 50,000 reads a day). Analytics Live keeps reading the last hour's readings directly.
+
+- ID: the UTC hour, `yyyymmddhh` (e.g. `2026111708` = 17 Nov 2026, 4-5 PM in Manila); `start`: the hour's first moment (timestamp).
+- `r`: map of reading ID -> `[ms after start, ph, phCalibrated (1/0), temperatureC, nh3GasMv, seq]`; `null` = no value (never 0). Defined once in `mobile/src/domain/hours.ts` (`packReading` / `unpackHour`), used by the app and the server.
+- Written by `onReadingCreated` (`functions/src/hours.ts`) for every new reading: one merge write on the reading's own key, no read, so a retried run cannot duplicate it. The readings stay the record; packs are a copy and can be rebuilt from them (read all readings, group by UTC hour, merge each into its pack - done once on 17 Nov 2026 for the 785 readings that existed before the function: 18 packs).
+- Readable by the station's owner, like the readings; no client can write them (rules tested in `devtools/rules.test.mjs`).
+
 ## Device status (one rule, used everywhere)
 
 Based on the newest reading's `serverTime` compared to now, with `interval = readingIntervalSec`:
@@ -180,4 +191,5 @@ Enforced in `firestore.rules`, tested in `devtools/rules.test.mjs`.
 - A user can read a device, and its readings, only if they are its `ownerUid`.
 - Only the device's `deviceUid` can create readings, and only well-formed ones (types, ranges, `serverTime == request.time`, `simulated` matches the device).
 - Nobody can update or delete readings from a client.
+- The owner can read the station's hourly packs (`hours`); only the backend writes them.
 - Anything not listed is denied.

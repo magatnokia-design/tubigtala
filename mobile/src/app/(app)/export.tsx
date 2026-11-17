@@ -8,7 +8,7 @@ import { CalendarModal } from '@/components/calendar';
 import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
-import { formatRange, MAX_RANGE_DAYS, startOfDay, type DayRange } from '@/domain/dates';
+import { daysInRange, formatRange, MAX_RANGE_DAYS, startOfDay, type DayRange } from '@/domain/dates';
 import { METRIC_INFO, type Metric } from '@/domain/thresholds';
 import { useAuth } from '@/hooks/use-auth';
 import { useDialog } from '@/hooks/use-dialog';
@@ -90,7 +90,12 @@ export default function ExportScreen() {
         <ThemedText style={styles.flex}>{formatRange(range)}</ThemedText>
         <Icon name="chevron_right" color="textSecondary" />
       </Pressable>
-      <ThemedText type="small" themeColor="textSecondary">{`Up to ${MAX_RANGE_DAYS} days per file`}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {daysInRange(range.start, range.end) > 7
+          // Measured 17 Nov 2026: a 31-day file is 44,640 rows, ~1.7 MB; a phone needs some seconds.
+          ? `Up to ${MAX_RANGE_DAYS} days per file. A long range has many readings (a month: up to 44,640), so preparing the file can take up to a minute.`
+          : `Up to ${MAX_RANGE_DAYS} days per file (a whole month).`}
+      </ThemedText>
 
       <View style={styles.spacer} />
       <Button

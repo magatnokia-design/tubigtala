@@ -291,3 +291,47 @@ test('gas warm-up after a power-on: no gas alert for 30 minutes, then the normal
   // The other sensors were never held back.
   assert.equal((await alertsFor('e2e-warmup', 'temperatureC')).length, 0);
 });
+
+test('ammonia gas critical for 3 readings after the warm-up: one SMS in mV; warm-up readings never count', async () => {
+  // Like 17 Nov 2026 08:49: gas jumped to 2534-3329 mV long after power-on.
+  await addDevice('e2e-gas-sms', false);
+  // During the warm-up even "too high" readings add up to nothing...
+  await upload('e2e-gas-sms', [{ seq: 27, nh3GasMv: 3000 }, { seq: 28, nh3GasMv: 3000 }, { seq: 29, nh3GasMv: 3000 }]);
+  await sleep(3000);
+  assert.equal((await deliveries('e2e-gas-sms', 'sms')).length, 0, 'no SMS from warm-up readings');
+  // ...and the first readings after it must make their own streak of 3.
+  await upload('e2e-gas-sms', [{ seq: 30, nh3GasMv: 2534 }, { seq: 31, nh3GasMv: 3329 }]);
+  await sleep(3000);
+  assert.equal((await deliveries('e2e-gas-sms', 'sms')).length, 0, 'warm-up readings do not complete the streak');
+  await upload('e2e-gas-sms', [{ seq: 32, nh3GasMv: 3269 }]);
+  const sms = await until('gas SMS delivery', async () => {
+    const d = await deliveries('e2e-gas-sms', 'sms');
+    return d.length && d.every((x) => x.status !== 'sending') ? d : undefined;
+  });
+  assert.equal(sms.length, 1);
+  assert.equal(sms[0].status, 'sent');
+  assert.equal(sms[0].metric, 'nh3GasMv');
+  const alerts = await alertsFor('e2e-gas-sms', 'nh3GasMv');
+  assert.equal(alerts.length, 1, 'one critical alert for the episode');
+  assert.equal(alerts[0].title, 'e2e-gas-sms: ammonia gas too high (2534 mV)');
+});
+
+test('every reading lands in its hourly pack, once, with null kept as null', async () => {
+  await addDevice('e2e-hours', false);
+  const at = Date.UTC(2026, 10, 17, 8, 5, 0);
+  await upload('e2e-hours', [
+    { at, seq: 40, temperatureC: 28.25, nh3GasMv: 1700 },
+    { at: at + 60_000, seq: 41, temperatureC: null },
+    { at: Date.UTC(2026, 10, 17, 9, 0, 0), seq: 42 }, // the next hour
+  ]);
+  const pack = await until('hourly pack', async () => {
+    const d = (await db.doc('devices/e2e-hours/hours/2026111708').get()).data();
+    return d && Object.keys(d.r ?? {}).length === 2 ? d : undefined;
+  });
+  assert.equal(pack.start.toMillis(), Date.UTC(2026, 10, 17, 8));
+  const entries = Object.values(pack.r as Record<string, unknown[]>).sort((a, b) => (a[0] as number) - (b[0] as number));
+  assert.deepEqual(entries[0], [5 * 60_000, 7.0, 1, 28.25, 1700, 40]);
+  assert.equal(entries[1][3], null, 'a missing temperature stays null');
+  const next = await until('next hour pack', async () => (await db.doc('devices/e2e-hours/hours/2026111709').get()).data());
+  assert.equal(Object.keys(next.r).length, 1);
+});

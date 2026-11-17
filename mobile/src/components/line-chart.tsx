@@ -13,7 +13,7 @@ const PAD = { top: 12, right: 12, bottom: 22, left: 40 };
 const COMPACT_BELOW = 110;
 const PAD_COMPACT = { ...PAD, top: 6, bottom: 18 };
 /** When the chart fills its parent: the least height it asks for. */
-const MIN_FILL_HEIGHT = 60;
+const MIN_FILL_HEIGHT = 40; // was 60: with the card's other rows that forced ~160 per card, so Analytics scrolled
 const MAX_POINTS = 160;
 /** Default: 3 reading intervals of 60 s, the same point at which the station counts as stale. */
 const DEFAULT_GAP_MS = 3 * 60_000;

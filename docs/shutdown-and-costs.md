@@ -18,7 +18,7 @@ Firestore usage (measured 16 Nov 2026 with Cloud Monitoring, `firestore.googleap
 - The station check (`checkStations`, every 5 minutes) reads about 3 documents per paired station per run: ~860 a day.
 - A phone open on the Water tab reads about one document per reading.
 - Analytics Live (app 0.9.3+) reloads once an hour (60–120 documents) plus one per new reading, and only while the app is on screen: ~3,000 a day if left open all day, nothing in the background. (Up to 0.9.2 it reloaded the hour every 5 minutes, even in the background: ~19,000 a day.)
-- A chart or export reads every reading in its range: one day ≈ 1,440, 7 days up to 10,000 (the cap; Firestore allows no more in a live query). Since 0.9.3 switching Live ↔ By date does not reload the range (both stay loaded while the app is on screen).
+- By date and exports (app 0.9.7+) read the hourly packs (`devices/{id}/hours`): 24 reads per day shown, at most 744 for a whole month - before 0.9.7 they read every reading (one day ≈ 1,440, 7 days up to 10,000). Each new reading costs one extra write for its pack (~1,440 writes a day per station; the free tier allows 20,000). Switching Live ↔ By date does not reload the range (both stay loaded while the app is on screen).
 
 So station + functions use about 14% of the free reads; a few long charts or exports a day by several users is what would go past it - at about USD 0.04 per extra 100,000 reads.
 

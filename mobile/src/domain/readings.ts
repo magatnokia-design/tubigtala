@@ -35,6 +35,10 @@ export interface Point {
  * with a null wherever the station sent nothing for longer than `gapMs`, so the line breaks
  * there instead of drawing a straight line across hours with no data. A bucket whose readings are
  * all missing also stays null. Points must be in time order.
+ *
+ * A long series is split into maxPoints / 2 time buckets, and each keeps its LOWEST and HIGHEST
+ * reading (in time order) - not their average, which flattened short spikes: half an hour of hot
+ * water in a month of readings (app 0.9.7 shows up to 31 days) would otherwise vanish.
  */
 export function chartSeries(points: Point[], maxPoints: number, gapMs: number): Point[] {
   if (points.length < 2) return points;
@@ -43,14 +47,26 @@ export function chartSeries(points: Point[], maxPoints: number, gapMs: number): 
   let series = points;
   let gap = gapMs;
   if (points.length > maxPoints && t1 > t0) {
-    const width = (t1 - t0) / maxPoints;
-    const buckets: Point[][] = Array.from({ length: maxPoints }, () => []);
-    for (const p of points) buckets[Math.min(maxPoints - 1, Math.floor((p.t - t0) / width))].push(p);
+    const n = Math.max(1, Math.floor(maxPoints / 2));
+    const width = (t1 - t0) / n;
+    const buckets: Point[][] = Array.from({ length: n }, () => []);
+    for (const p of points) buckets[Math.min(n - 1, Math.floor((p.t - t0) / width))].push(p);
     series = [];
     for (const b of buckets) {
       if (!b.length) continue; // an empty bucket becomes a gap below
-      const s = stats(b.map((p) => p.v));
-      series.push({ t: b[Math.floor(b.length / 2)].t, v: s ? s.avg : null });
+      const valid = b.filter((p): p is { t: number; v: number } => p.v !== null && Number.isFinite(p.v));
+      if (!valid.length) {
+        series.push({ t: b[Math.floor(b.length / 2)].t, v: null });
+        continue;
+      }
+      let lo = valid[0];
+      let hi = valid[0];
+      for (const p of valid) {
+        if (p.v < lo.v) lo = p;
+        if (p.v > hi.v) hi = p;
+      }
+      if (lo.t === hi.t) series.push(hi);
+      else series.push(...(lo.t < hi.t ? [lo, hi] : [hi, lo]));
     }
     // Neighbouring buckets can be up to two widths apart without any missing time.
     gap = Math.max(gapMs, 2.5 * width);

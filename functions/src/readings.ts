@@ -7,7 +7,8 @@
 //     with the default limits built in cannot raise alerts the owner's limits would not.
 //  2. If this reading has an alert: one phone push per alert to the owner's registered phones
 //     (users/{uid}/pushTokens), when phone notifications are on.
-//  3. If a field is critical, pH (calibrated) or temperature, for SMS_STREAK readings in a row:
+//  3. If a field is critical - temperature, ammonia gas (since 0.9.7) or calibrated pH - for
+//     SMS_STREAK readings in a row (warm-up gas readings do not count):
 //     one SMS per alert episode, within the account-wide day/month caps.
 //  4. A field with no value: after SENSOR_MISSING_MS without one, one "sensor not reading" alert
 //     (push only), tracked in the same alertState document (missingSince, missingAlertedAt).
@@ -164,7 +165,7 @@ export async function processReading(deps: Deps, deviceId: string, readingId: st
 
   if (alerts.length === 0 && critical.length === 0) return;
   const profile = (await db.doc(`users/${uid}`).get()).data();
-  const ctx = { uid, deviceId, readingId, deviceName, simulated, phCalibrated, readingMs, profile };
+  const ctx = { uid, deviceId, readingId, deviceName, simulated, phCalibrated, readingMs, profile, intervalSec };
   if (alerts.length > 0) await sendPush(deps, ctx, alerts);
   if (critical.length > 0) await sendSms(deps, ctx, critical);
 }
@@ -258,7 +259,7 @@ interface Ctx {
   profile: DocumentData | undefined;
 }
 
-async function sendSms(deps: Deps, ctx: Ctx & { phCalibrated: boolean }, critical: (SmsItem & { alertedAtMs: number })[]): Promise<void> {
+async function sendSms(deps: Deps, ctx: Ctx & { phCalibrated: boolean; intervalSec: number }, critical: (SmsItem & { alertedAtMs: number })[]): Promise<void> {
   const { db } = deps;
   if (ctx.simulated) return; // test data never costs an SMS
   const phone = ctx.profile?.smsAlertsEnabled === true && typeof ctx.profile.phoneE164 === 'string' ? (ctx.profile.phoneE164 as string) : null;
@@ -268,7 +269,11 @@ async function sendSms(deps: Deps, ctx: Ctx & { phCalibrated: boolean }, critica
 
   // The newest readings by server time; this one is among them unless a newer one already arrived.
   const recent = await db.collection(`devices/${ctx.deviceId}/readings`).orderBy('serverTime', 'desc').limit(SMS_STREAK).get();
-  const streak = allowed.filter((c) => isCriticalStreak(c.metric, recent.docs.map((d) => d.get(c.metric)), c.range));
+  // A gas reading from the warm-up after a power-on does not count (domain/warmup.ts): it breaks
+  // the streak, so the warm-up can never add up to an SMS.
+  const counted = (metric: Metric, d: (typeof recent.docs)[number]) =>
+    (warmingUp(metric, { seq: typeof d.get('seq') === 'number' ? d.get('seq') : null, simulated: ctx.simulated }, ctx.intervalSec) ? null : d.get(metric));
+  const streak = allowed.filter((c) => isCriticalStreak(c.metric, recent.docs.map((d) => counted(c.metric, d)), c.range));
   if (streak.length === 0) return;
 
   // One SMS per alert episode (an episode = one critical alert, identified by when it was raised),

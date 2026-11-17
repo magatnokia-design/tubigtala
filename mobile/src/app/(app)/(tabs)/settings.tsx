@@ -155,6 +155,24 @@ export default function SettingsScreen() {
           />
         </Section>
 
+        <Section title="Notifications">
+          <Row
+            icon="notifications_active"
+            label="Phone notifications"
+            value={!phoneNotificationsSupported ? 'Works in the installed app' : p.pushEnabled && osPermission === false ? 'Off in Android settings' : undefined}
+            right={pending === 'push'
+              ? <ActivityIndicator color={theme.tint} />
+              : <Switch value={p.pushEnabled} onValueChange={togglePush} disabled={pending !== null} {...switchColors} />}
+          />
+        </Section>
+
+        {error && (
+          <View style={styles.error}>
+            <Notice tone="warning">{error.text}</Notice>
+            {error.openSettings && <Row icon="settings" label="Open Android settings" onPress={() => Linking.openSettings()} chevron />}
+          </View>
+        )}
+
         {!device && (
           <Section title="Station">
             <Row icon="qr_code_scanner" label={`Add ${STATION_NAME}`} value="Scan the QR sticker on the station" onPress={() => router.push('/pair-device')} chevron />
@@ -192,24 +210,6 @@ export default function SettingsScreen() {
           </Section>
         )}
 
-        <Section title="Notifications">
-          <Row
-            icon="notifications_active"
-            label="Phone notifications"
-            value={!phoneNotificationsSupported ? 'Works in the installed app' : p.pushEnabled && osPermission === false ? 'Off in Android settings' : undefined}
-            right={pending === 'push'
-              ? <ActivityIndicator color={theme.tint} />
-              : <Switch value={p.pushEnabled} onValueChange={togglePush} disabled={pending !== null} {...switchColors} />}
-          />
-        </Section>
-
-        {error && (
-          <View style={styles.error}>
-            <Notice tone="warning">{error.text}</Notice>
-            {error.openSettings && <Row icon="settings" label="Open Android settings" onPress={() => Linking.openSettings()} chevron />}
-          </View>
-        )}
-
         <Button label="Sign out" icon="logout" variant="outline" onPress={confirmSignOut} style={styles.signOut} />
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
@@ -225,7 +225,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
   scroll: { marginTop: -HEADER_CURVE },
-  content: { padding: Spacing.four, paddingTop: HEADER_CURVE + Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
+  // Little space under the version line: the tab bar sits right below the list (it was 64).
+  content: { padding: Spacing.four, paddingTop: HEADER_CURVE + Spacing.three, gap: Spacing.three, paddingBottom: Spacing.three },
   account: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 17, lineHeight: 22, fontWeight: 700 },

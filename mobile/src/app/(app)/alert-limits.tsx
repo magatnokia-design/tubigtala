@@ -133,7 +133,7 @@ export default function AlertLimitsScreen() {
       <View style={[styles.legend, { backgroundColor: theme.backgroundElement }]}>
         <Legend color={theme.levelNormal} text="Normal: no alert" />
         <Legend color={theme.levelWarning} text="Outside normal: phone notification" />
-        <Legend color={theme.levelCritical} text="Critical: phone notification, and an SMS after 3 readings in a row (temperature, and pH once calibrated)" />
+        <Legend color={theme.levelCritical} text="Critical: phone notification, and an SMS after 3 readings in a row (temperature, ammonia gas, and pH once calibrated)" />
       </View>
 
       {!online && <Notice tone="warning">You are offline. Saving needs a connection.</Notice>}
@@ -262,7 +262,7 @@ function SensorCard({ metric, range, fallback, value, warmupMin, input }: {
         <ThemedText type="small" themeColor="textSecondary">{`Default: ${limitsSentence(metric, RANGES[metric])}`}</ThemedText>
       )}
       {metric === 'nh3GasMv' && (
-        <ThemedText type="small" themeColor="textSecondary">Gas in the air above the water, relative mV (not ppm). Never sent by SMS.</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">Gas in the air above the water, relative mV (not ppm). Not checked during its 30-minute warm-up after the station is switched on.</ThemedText>
       )}
     </View>
   );
