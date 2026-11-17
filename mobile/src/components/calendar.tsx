@@ -6,7 +6,7 @@ import { Icon } from '@/components/icon';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import {
-  DATA_START_DAY, formatRange, isSelectableDay, lastPickableEnd, MAX_RANGE_DAYS, monthGrid, pickModeOf, startOfDay,
+  DATA_START_DAY, formatRange, isSelectableDay, lastPickableEnd, MAX_RANGE_DAYS, monthGrid, monthRange, pickModeOf, startOfDay,
   type DayRange, type PickMode,
 } from '@/domain/dates';
 import { useTheme } from '@/hooks/use-theme';
@@ -15,12 +15,14 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MODES: { key: PickMode; label: string }[] = [
   { key: 'today', label: 'Today' },
   { key: 'day', label: 'One day' },
-  { key: 'range', label: 'Date range' },
+  { key: 'range', label: 'Range' },
+  // A whole month: 28-31 days depending on the month (app 0.9.7).
+  { key: 'month', label: 'Month' },
 ];
 
 /**
- * TubigTala's own date picker, shared by Analytics (By date) and Export. Three ways to pick:
- * today, one day, or a range of up to MAX_RANGE_DAYS. Only DATA_START_DAY (1 Nov 2026) to today
+ * TubigTala's own date picker, shared by Analytics (By date) and Export. Four ways to pick:
+ * today, one day, a range of up to MAX_RANGE_DAYS, or the whole month on screen. Only DATA_START_DAY (1 Nov 2026) to today
  * can be chosen - there are no readings before or after.
  */
 export function CalendarModal({ visible, initial, onApply, onClose }: {
@@ -43,10 +45,12 @@ export function CalendarModal({ visible, initial, onApply, onClose }: {
   const title = new Date(monthStart).toLocaleDateString([], { month: 'long', year: 'numeric' });
   const endLimit = awaitingEnd ? lastPickableEnd(range.start, today) : today;
 
-  const shift = (n: number) => setMonth(({ y, m }) => {
-    const d = new Date(y, m + n, 1);
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
+  const shift = (n: number) => {
+    const d = new Date(month.y, month.m + n, 1);
+    setMonth({ y: d.getFullYear(), m: d.getMonth() });
+    // In Month mode the selection follows the month on screen.
+    if (mode === 'month') setRange(monthRange(d.getFullYear(), d.getMonth(), today));
+  };
 
   function chooseMode(next: PickMode) {
     setMode(next);
@@ -56,6 +60,8 @@ export function CalendarModal({ visible, initial, onApply, onClose }: {
       setMonth({ y: new Date(today).getFullYear(), m: new Date(today).getMonth() });
     } else if (next === 'day') {
       setRange({ start: range.end, end: range.end });
+    } else if (next === 'month') {
+      setRange(monthRange(month.y, month.m, today));
     }
   }
 
@@ -76,6 +82,8 @@ export function CalendarModal({ visible, initial, onApply, onClose }: {
 
   const hint = mode === 'today'
     ? 'Readings from midnight until now.'
+    : mode === 'month'
+      ? 'Every day of the month on screen, up to today. Change month with the arrows.'
     : mode === 'day'
       ? 'Tap a day.'
       : awaitingEnd

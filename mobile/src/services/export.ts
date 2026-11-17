@@ -9,7 +9,7 @@ import { limitsOf } from '@/domain/limits';
 import type { Metric } from '@/domain/thresholds';
 import type { Device } from '@/domain/types';
 import { buildXlsx } from '@/lib/xlsx';
-import { fetchReadingsBetween } from '@/services/devices';
+import { fetchHoursBetween } from '@/services/devices';
 import { fetchAlertsBetween } from '@/services/notifications';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -24,7 +24,8 @@ export interface ExportResult {
 export async function exportToExcel(uid: string, device: Device, range: DayRange, metrics: Metric[]): Promise<ExportResult> {
   const end = endOfDay(range.end);
   const [{ readings, truncated }, alerts] = await Promise.all([
-    fetchReadingsBetween(device.id, range.start, end),
+    // From the hourly packs: a 31-day export is at most 744 reads (domain/hours.ts).
+    fetchHoursBetween(device.id, device.simulated, range.start, end),
     fetchAlertsBetween(uid, device.id, range.start, end),
   ]);
 

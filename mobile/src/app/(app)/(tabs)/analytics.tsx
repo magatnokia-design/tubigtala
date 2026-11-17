@@ -25,7 +25,7 @@ import { classify, METRIC_INFO, type Metric, type Range, type Status } from '@/d
 import { warmingUp } from '@/domain/warmup';
 import type { Reading } from '@/domain/types';
 import { useAppActive } from '@/hooks/use-app-active';
-import { useReadingsBetween } from '@/hooks/use-devices';
+import { useHoursBetween, useReadingsBetween } from '@/hooks/use-devices';
 import { useNow } from '@/hooks/use-now';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
@@ -66,7 +66,8 @@ export default function AnalyticsScreen() {
   const appActive = useAppActive();
   const liveStart = Math.floor(now / LIVE_STEP_MS) * LIVE_STEP_MS - LIVE_WINDOW_MS;
   const live = useReadingsBetween(appActive ? deviceId : null, liveStart, FAR_FUTURE_MS);
-  const dated = useReadingsBetween(appActive && dateOpened ? deviceId : null, range.start, endOfDay(range.end));
+  // By date reads the hourly packs (up to 31 days = 744 reads; domain/hours.ts); Live reads readings.
+  const dated = useHoursBetween(appActive && dateOpened ? device : null, range.start, endOfDay(range.end));
   const history = mode === 'live' ? live : dated;
 
   const readings = useMemo(() => {

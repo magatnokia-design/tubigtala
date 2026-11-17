@@ -6,6 +6,7 @@ import { logger } from 'firebase-functions';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 
+import { packIntoHour } from './hours.ts';
 import { providersFromEnv, pushOnlyProviders, TEXTBEE_API_KEY, TEXTBEE_DEVICE_ID } from './providers.ts';
 import { claimPushToken, releasePushToken } from './push-owners.ts';
 import { processReading } from './readings.ts';
@@ -26,12 +27,17 @@ export const onReadingCreated = onDocumentCreated(
   },
   async (event) => {
     if (!event.data) return;
-    await processReading(
-      { db: getFirestore(), providers: providersFromEnv() },
-      event.params.deviceId,
-      event.params.readingId,
-      event.data.data(),
-    );
+    const db = getFirestore();
+    const reading = event.data.data();
+    const { deviceId, readingId } = event.params;
+    // The hourly pack (long-range views, hours.ts) and the alerts are independent: one failing must
+    // not stop the other. A failure is rethrown afterwards so it shows as an error in the logs.
+    const results = await Promise.allSettled([
+      packIntoHour(db, deviceId, readingId, reading),
+      processReading({ db, providers: providersFromEnv() }, deviceId, readingId, reading),
+    ]);
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed) throw failed.reason;
   },
 );
 

@@ -6,6 +6,8 @@ import {
 } from 'firebase/firestore';
 
 import { calibrationMethod, DEFAULT_BUFFERS, type Buffers } from '@/domain/calibration';
+import { MAX_RANGE_DAYS } from '@/domain/dates';
+import { hourStartOf, unpackHour } from '@/domain/hours';
 import { isDefaultLimits, LIMIT_METRICS, limitsFromDoc, toStored, type Limits } from '@/domain/limits';
 import type { PairingInfo } from '@/domain/pairing';
 import type { Device, Reading } from '@/domain/types';
@@ -192,4 +194,46 @@ export function subscribeReadingsBetween(
 /** One-off fetch for exports. */
 export async function fetchReadingsBetween(deviceId: string, startMs: number, endMs: number) {
   return toResult((await getDocs(betweenQuery(deviceId, startMs, endMs))).docs);
+}
+
+// ---- Hourly packs (devices/{id}/hours, domain/hours.ts): long periods in few reads ----
+
+const hoursQuery = (deviceId: string, startMs: number, endMs: number) => query(
+  collection(db, 'devices', deviceId, 'hours'),
+  where('start', '>=', Timestamp.fromMillis(hourStartOf(startMs))),
+  where('start', '<=', Timestamp.fromMillis(endMs)),
+  orderBy('start'),
+  // 31 days are 744 hours; the cap only guards against a wrong range.
+  limit(MAX_RANGE_DAYS * 24 + 2),
+);
+
+const fromHours = (docs: QueryDocumentSnapshot<DocumentData>[], startMs: number, endMs: number, simulated: boolean) => ({
+  readings: docs
+    .flatMap((d) => {
+      const start = millisOrNull(d.data().start);
+      return start === null ? [] : unpackHour(start, d.data().r, simulated);
+    })
+    .filter((r) => r.serverTimeMs >= startMs && r.serverTimeMs <= endMs),
+  truncated: false,
+});
+
+/**
+ * Readings between two times from the hourly packs (oldest first), live: the current hour's pack
+ * updates with each new reading. Used for By date and exports (up to MAX_RANGE_DAYS); the Live view
+ * keeps reading the last hour's readings directly.
+ */
+export function subscribeHoursBetween(
+  deviceId: string, simulated: boolean, startMs: number, endMs: number,
+  onData: (result: { readings: Reading[]; truncated: boolean }) => void, onError: (e: FirestoreError) => void,
+): Unsubscribe {
+  return onSnapshot(hoursQuery(deviceId, startMs, endMs), (snap) => {
+    const offline = emptyBecauseOffline(snap);
+    if (offline) return onError(offline);
+    onData(fromHours(snap.docs, startMs, endMs, simulated));
+  }, onError);
+}
+
+/** One-off fetch from the hourly packs, for exports. */
+export async function fetchHoursBetween(deviceId: string, simulated: boolean, startMs: number, endMs: number) {
+  return fromHours((await getDocs(hoursQuery(deviceId, startMs, endMs))).docs, startMs, endMs, simulated);
 }

@@ -315,3 +315,23 @@ test('ammonia gas critical for 3 readings after the warm-up: one SMS in mV; warm
   assert.equal(alerts.length, 1, 'one critical alert for the episode');
   assert.equal(alerts[0].title, 'e2e-gas-sms: ammonia gas too high (2534 mV)');
 });
+
+test('every reading lands in its hourly pack, once, with null kept as null', async () => {
+  await addDevice('e2e-hours', false);
+  const at = Date.UTC(2026, 10, 17, 8, 5, 0);
+  await upload('e2e-hours', [
+    { at, seq: 40, temperatureC: 28.25, nh3GasMv: 1700 },
+    { at: at + 60_000, seq: 41, temperatureC: null },
+    { at: Date.UTC(2026, 10, 17, 9, 0, 0), seq: 42 }, // the next hour
+  ]);
+  const pack = await until('hourly pack', async () => {
+    const d = (await db.doc('devices/e2e-hours/hours/2026111708').get()).data();
+    return d && Object.keys(d.r ?? {}).length === 2 ? d : undefined;
+  });
+  assert.equal(pack.start.toMillis(), Date.UTC(2026, 10, 17, 8));
+  const entries = Object.values(pack.r as Record<string, unknown[]>).sort((a, b) => (a[0] as number) - (b[0] as number));
+  assert.deepEqual(entries[0], [5 * 60_000, 7.0, 1, 28.25, 1700, 40]);
+  assert.equal(entries[1][3], null, 'a missing temperature stays null');
+  const next = await until('next hour pack', async () => (await db.doc('devices/e2e-hours/hours/2026111709').get()).data());
+  assert.equal(Object.keys(next.r).length, 1);
+});
