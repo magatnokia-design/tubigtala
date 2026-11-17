@@ -6,7 +6,7 @@
  * TubigTala.apk, so this always gets the newest. The page links only to the file itself.
  */
 export const APK_URL = 'https://github.com/magatnokia-design/tubigtala/releases/latest/download/TubigTala.apk';
-export const APP_VERSION = '0.9.6';
+export const APP_VERSION = '0.9.7';
 
 export const steps = [
   { icon: 'sensors', title: 'The station measures', text: 'An ESP32 station at your tank reads the water temperature, the pH, and the ammonia gas in the air above the water - every minute.' },
@@ -16,18 +16,19 @@ export const steps = [
 
 export const features = [
   { icon: 'water_drop', title: 'Live readings', text: 'Temperature, pH and ammonia gas, refreshed every minute, coloured green, amber or red.' },
-  // SMS rule as in functions/src/policy.ts: temperature, or pH once calibrated, critical for
-  // SMS_STREAK (3) readings in a row. Both channels verified 16 Nov 2026 with the app closed
+  // SMS rule as in functions/src/policy.ts: temperature, ammonia gas (since 0.9.7) or pH once
+  // calibrated, critical for SMS_STREAK (3) readings in a row. Both channels verified 16 Nov 2026 with the app closed
   // (push from the server via Firebase Cloud Messaging, app 0.9.2+).
-  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, even when the app is closed, with the reading in plain words ("water too acidic, pH 5.8"), and an SMS when the temperature or the calibrated pH stays critical for three readings in a row.' },
+  { icon: 'notifications_active', title: 'Alerts', text: 'A phone notification when a reading leaves its normal range, even when the app is closed, with the reading in plain words ("water too acidic, pH 5.8"), and an SMS when the temperature, the ammonia gas or the calibrated pH stays critical for three readings in a row.' },
   // Settings > Station > Alert limits (app 0.9.4+, devices/{id}.limits, mobile/src/domain/limits.ts).
   { icon: 'tune', title: 'Your own alert limits', text: 'Keep the tap-water defaults, or set the normal range and the critical limits of each sensor for your station.' },
   // functions/src/stations.ts + readings.ts trackMissing (16 Nov 2026; offline verified live that day) and
   // the gas warm-up (mobile/src/domain/warmup.ts GAS_SETTLE_MS: 30 minutes since app 0.9.6).
   { icon: 'sensors', title: 'Station health', text: 'A notification when the station goes offline or comes back, or a sensor stops reading. The gas sensor gets 30 minutes to warm up after power-on.' },
   // Matches the app's Analytics cards since 0.9.3 (no high / low lines; one summary line).
-  { icon: 'monitoring', title: 'Charts and insights', text: 'The last hour live, or any day or week since data started, with how much of the time each reading was normal and which way it moved.' },
-  { icon: 'download', title: 'Excel export', text: 'Pick today, one day or a date range and save the readings as a spreadsheet.' },
+  // App 0.9.7: By date up to a month (hourly packs), tap a card for its insights (domain/period.ts).
+  { icon: 'monitoring', title: 'Charts and insights', text: 'The last hour live, or any day, week or month since data started. Tap a sensor to see how the period went: time in each status, highest and lowest, and the longest time outside normal.' },
+  { icon: 'download', title: 'Excel export', text: 'Pick today, one day, a date range or a whole month and save the readings as a spreadsheet.' },
   { icon: 'qr_code_scanner', title: 'Scan to pair', text: 'Add your station by scanning the QR sticker on it. No setup codes to type.' },
   { icon: 'water_ph', title: 'pH calibration', text: 'Calibrate the pH probe in the app with your buffer solutions (6.86 and 4.01), step by step.' },
 ];
