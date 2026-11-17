@@ -238,8 +238,10 @@ const styles = StyleSheet.create({
   dateChip: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   // flex: 1 = the three cards share the screen; minHeight keeps a chart readable on small phones
   // (the screen scrolls instead).
-  // Budget on a 360 x 800 phone: ~166 per card; fixed rows ~102, so the chart gets ~64 (min 60).
-  card: { flex: 1, minHeight: 160, borderWidth: 1, borderRadius: Radius.card, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, gap: Spacing.one + 2 },
+  // Budget on a 360 x 800 phone: ~150 per card (measured from the user's phone, 17 Nov 2026: the
+  // header and the date row leave ~450 for three cards); fixed rows ~100, so the chart gets ~50.
+  // The minimum was 160, which made that phone scroll a little - unlike the Water tab.
+  card: { flex: 1, minHeight: 128, borderWidth: 1, borderRadius: Radius.card, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two + 2, gap: Spacing.one + 2 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   cardTitle: { flex: 1, fontSize: 15 },
   valueBox: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },

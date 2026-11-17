@@ -29,7 +29,7 @@ test('chart series: steady readings stay one line; missing values stay gaps', ()
   assert.deepEqual(chartSeries(warmup, 160, 3 * MIN), warmup);
 });
 
-test('chart series: long series are averaged into time buckets, gaps kept', () => {
+test('chart series: long series are thinned into time buckets, gaps kept', () => {
   // 1000 readings in the first hour, 1000 in the third: the empty second hour must stay a gap
   const a = Array.from({ length: 1000 }, (_, i) => ({ t: (i * 60 * MIN) / 1000, v: 10 }));
   const b = Array.from({ length: 1000 }, (_, i) => ({ t: 120 * MIN + (i * 60 * MIN) / 1000, v: 20 }));
@@ -47,4 +47,16 @@ test('axis ticks are round numbers inside the range', () => {
   assert.deepEqual(niceTicks(1340, 1575), [1400, 1500]);
   assert.deepEqual(niceTicks(7.5, 58), [20, 40]);
   assert.deepEqual(niceTicks(24.65, 24.95), [24.7, 24.8, 24.9]);
+});
+
+test('chart series: a short spike survives a month of readings', () => {
+  // 31 days at one reading a minute, 27 °C, with half an hour of hot water (57 °C) on day 16 -
+  // averaging each bucket used to flatten it to about 31 °C.
+  const day = 24 * 60 * MIN;
+  const pts = Array.from({ length: 31 * 24 * 60 }, (_, i) => ({ t: i * MIN, v: i * MIN >= 15 * day && i * MIN < 15 * day + 30 * MIN ? 57 : 27 }));
+  const out = chartSeries(pts, 160, 3 * MIN);
+  assert.ok(out.length <= 160, `${out.length} points`);
+  assert.equal(Math.max(...out.map((p) => p.v ?? -Infinity)), 57, 'the spike is kept');
+  assert.equal(Math.min(...out.map((p) => p.v ?? Infinity)), 27);
+  assert.ok(out.every((p, i) => i === 0 || p.t > out[i - 1].t), 'time order kept');
 });
