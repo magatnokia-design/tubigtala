@@ -6,6 +6,7 @@ import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { LevelChip } from '@/components/level-chip';
 import { Notice } from '@/components/notice';
+import { Pulse } from '@/components/pulse';
 import { ScaleBar } from '@/components/scale-bar';
 import { ThemedText } from '@/components/themed-text';
 import { METRIC_ICON } from '@/constants/metric-icons';
@@ -15,10 +16,13 @@ import {
   HIGH_SIDE_ONLY, LIMIT_FIELDS, LIMIT_METRICS, limitFieldError, limitsOf, limitTexts, rangeFromTexts, sameRange,
   type LimitField, type Limits, type LimitTexts,
 } from '@/domain/limits';
+import { deviceStatus } from '@/domain/status';
 import { classify, METRIC_INFO, normalRangeText, RANGES, type Metric, type Range } from '@/domain/thresholds';
+import { gasWarmupLeftNowMs, warmingUp, warmupMinutesLeft } from '@/domain/warmup';
 import { useLatestReading } from '@/hooks/use-devices';
 import { useDialog } from '@/hooks/use-dialog';
 import { useForm } from '@/hooks/use-form';
+import { useNow } from '@/hooks/use-now';
 import { useOnline } from '@/hooks/use-online';
 import { useSelectedDevice } from '@/hooks/use-selected-device';
 import { useTheme } from '@/hooks/use-theme';
@@ -64,6 +68,7 @@ export default function AlertLimitsScreen() {
   const dialog = useDialog();
   const { device } = useSelectedDevice();
   const latest = useLatestReading(device?.id ?? null);
+  const now = useNow();
   const saved = limitsOf(device);
   const savedValues = useMemo(() => formValues(saved), [saved]);
   const form = useForm<Field>(savedValues, VALIDATORS);
@@ -79,6 +84,12 @@ export default function AlertLimitsScreen() {
   }
 
   const reading = latest.status === 'ready' ? latest.data : null;
+  // Same warm-up rule as the Water tab and the server (domain/warmup.ts): while the gas sensor warms
+  // up after a power-on its value is not judged, so this screen must not call it "Too high" either.
+  const live = reading !== null && device !== null && deviceStatus(reading.serverTimeMs, device.readingIntervalSec, now) === 'live';
+  const warmupMin = (m: Metric): number | null => (live && reading && device && warmingUp(m, reading, device.readingIntervalSec)
+    ? warmupMinutesLeft(gasWarmupLeftNowMs(reading, device.readingIntervalSec, now))
+    : null);
   const changed = FIELDS.some((f) => form.values[f].trim() !== savedValues[f]);
   const atDefaults = FIELDS.every((f) => form.values[f].trim() === DEFAULT_VALUES[f]);
 
@@ -138,6 +149,7 @@ export default function AlertLimitsScreen() {
             range={range}
             fallback={saved[m]}
             value={value}
+            warmupMin={warmupMin(m)}
             input={(f, label, prefix) => (
               <LimitInput
                 prefix={prefix}
@@ -171,13 +183,15 @@ function Legend({ color, text }: { color: string; text: string }) {
 /**
  * One sensor: a bar showing its bands with the newest reading, the limits as inputs, and what the
  * newest reading would be with them. `range` is null while the inputs have an error; the bar
- * then keeps showing `fallback` (the saved limits).
+ * then keeps showing `fallback` (the saved limits). `warmupMin`: minutes left in the gas sensor's
+ * warm-up after a power-on (null when not warming up); the reading is then not judged.
  */
-function SensorCard({ metric, range, fallback, value, input }: {
+function SensorCard({ metric, range, fallback, value, warmupMin, input }: {
   metric: Metric;
   range: Range | null;
   fallback: Range;
   value: number | null;
+  warmupMin: number | null;
   input: (field: LimitField, label: string, prefix?: string) => ReactNode;
 }) {
   const theme = useTheme();
@@ -206,11 +220,17 @@ function SensorCard({ metric, range, fallback, value, input }: {
       <View style={styles.cardTop}>
         <Icon name={METRIC_ICON[metric]} size={20} />
         <ThemedText type="smallBold" style={styles.cardTitle}>{info.name}</ThemedText>
-        {status && <LevelChip level={status.level} label={status.label} compact />}
+        {warmupMin !== null
+          ? <Pulse><LevelChip level="unknown" label="Warming up" compact /></Pulse>
+          : status && <LevelChip level={status.level} label={status.label} compact />}
       </View>
 
       <ScaleBar value={value} min={scale.min} max={scale.max} segments={segments} labels={scale.labels} />
-      {value !== null && (
+      {warmupMin !== null ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {`${value === null ? 'No value yet' : `Newest reading ${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''}`} · the sensor is warming up after power-on, so it is not checked for about ${warmupMin} more min`}
+        </ThemedText>
+      ) : value !== null && (
         <ThemedText type="small" themeColor="textSecondary">
           {`Newest reading ${formatNumber(value, info.decimals)}${info.unit ? ` ${info.unit}` : ''}, checked with the limits below`}
         </ThemedText>

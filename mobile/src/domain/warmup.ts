@@ -34,6 +34,14 @@ export function gasWarmupLeftMs(r: WarmupReading, intervalSec: number): number {
   return up === null ? 0 : Math.max(0, GAS_SETTLE_MS - up);
 }
 
+/** Warm-up time left now (ms): what was left at the reading, minus the time since it was taken. */
+export function gasWarmupLeftNowMs(r: WarmupReading & { serverTimeMs: number }, intervalSec: number, nowMs: number): number {
+  return Math.max(0, gasWarmupLeftMs(r, intervalSec) - Math.max(0, nowMs - r.serverTimeMs));
+}
+
+/** "about 8 min" left, never less than 1 (the next reading decides when it is over). */
+export const warmupMinutesLeft = (leftMs: number) => Math.max(1, Math.ceil(leftMs / 60_000));
+
 /** True when this field's value in this reading does not count yet (only gas has a warm-up). */
 export function warmingUp(metric: Metric, r: WarmupReading, intervalSec: number): boolean {
   return metric === 'nh3GasMv' && gasWarmupLeftMs(r, intervalSec) > 0;

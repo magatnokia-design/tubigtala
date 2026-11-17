@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { GAS_SETTLE_MS, gasWarmupLeftMs, isFirstReading, uptimeMs, warmingUp } from './warmup.ts';
+import { GAS_SETTLE_MS, gasWarmupLeftMs, gasWarmupLeftNowMs, isFirstReading, uptimeMs, warmingUp, warmupMinutesLeft } from './warmup.ts';
 
 const r = (seq: number | null, simulated = false) => ({ seq, simulated });
 
@@ -36,4 +36,17 @@ test('no warm-up when it cannot be known, or for simulated devices', () => {
 test('a faster station warms up for the same time, over more readings', () => {
   assert.equal(warmingUp('nh3GasMv', r(60), 10), true, '10 minutes at one reading per 10 s');
   assert.equal(warmingUp('nh3GasMv', r(90), 10), false);
+});
+
+test('the countdown runs on between readings and never shows less than 1 minute', () => {
+  const at = 1_000_000;
+  const reading = { seq: 6, simulated: false, serverTimeMs: at };
+  assert.equal(gasWarmupLeftNowMs(reading, 60, at), 9 * 60_000);
+  assert.equal(gasWarmupLeftNowMs(reading, 60, at + 30_000), 8.5 * 60_000, 'half a minute after the reading');
+  assert.equal(gasWarmupLeftNowMs(reading, 60, at + 20 * 60_000), 0, 'long after: done (the next reading decides)');
+  assert.equal(gasWarmupLeftNowMs(reading, 60, at - 5_000), 9 * 60_000, 'a phone clock behind the server never adds time');
+  assert.equal(warmupMinutesLeft(9 * 60_000), 9);
+  assert.equal(warmupMinutesLeft(8.5 * 60_000), 9);
+  assert.equal(warmupMinutesLeft(10_000), 1);
+  assert.equal(warmupMinutesLeft(0), 1);
 });
